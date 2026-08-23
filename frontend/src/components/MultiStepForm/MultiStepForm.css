@@ -1,0 +1,368 @@
+/* ── Multi-Step Form ───────────────────────────────────────────── */
+
+.msf-container {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ── Progress Bar ──────────────────────────────────────────────── */
+.msf-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) 0;
+  margin-bottom: var(--space-4);
+}
+
+.msf-progress-step {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.msf-progress-dot {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-lg);
+  background: var(--color-bg-tertiary);
+  border: 2px solid var(--color-border);
+  transition: all var(--transition-base);
+  position: relative;
+  z-index: 2;
+}
+
+.msf-progress-step.active .msf-progress-dot {
+  border-color: var(--color-accent);
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.msf-progress-step.current .msf-progress-dot {
+  border-color: var(--color-accent);
+  background: var(--gradient-primary);
+  box-shadow: var(--shadow-glow);
+  transform: scale(1.1);
+}
+
+.msf-progress-label {
+  position: absolute;
+  bottom: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  font-weight: 500;
+  transition: color var(--transition-fast);
+}
+
+.msf-progress-step.active .msf-progress-label {
+  color: var(--color-text-secondary);
+}
+
+.msf-progress-step.current .msf-progress-label {
+  color: var(--color-accent);
+}
+
+.msf-progress-line {
+  width: 80px;
+  height: 2px;
+  background: var(--color-border);
+  margin: 0 var(--space-2);
+  transition: background var(--transition-base);
+  position: relative;
+  z-index: 1;
+}
+
+.msf-progress-line.filled {
+  background: var(--gradient-primary);
+}
+
+/* ── Form Body ─────────────────────────────────────────────────── */
+.msf-body {
+  padding: var(--space-10);
+  min-height: 360px;
+  display: flex;
+  align-items: stretch;
+}
+
+.msf-step-content {
+  width: 100%;
+}
+
+.msf-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.msf-step-header {
+  text-align: center;
+  margin-bottom: var(--space-2);
+}
+
+.msf-step-title {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-2);
+}
+
+.msf-step-subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.msf-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* ── Option Grid (Languages) ───────────────────────────────────── */
+.msf-option-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.msf-option-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  background: var(--color-bg-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-family: var(--font-family);
+  color: var(--color-text-secondary);
+}
+
+.msf-option-card:hover {
+  background: var(--color-bg-glass-hover);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.msf-option-card.selected {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
+}
+
+.msf-option-icon {
+  font-size: var(--font-size-2xl);
+}
+
+.msf-option-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+/* ── Database Grid ─────────────────────────────────────────────── */
+.msf-db-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.msf-db-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-bg-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-family: var(--font-family);
+  text-align: left;
+  color: var(--color-text-primary);
+}
+
+.msf-db-card:hover {
+  background: var(--color-bg-glass-hover);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.msf-db-card.selected {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
+}
+
+.msf-db-icon { font-size: var(--font-size-xl); }
+
+.msf-db-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.msf-db-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Slider ────────────────────────────────────────────────────── */
+.msf-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  outline: none;
+  cursor: pointer;
+}
+
+.msf-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-primary);
+  border: 2px solid white;
+  box-shadow: var(--shadow-glow);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.msf-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.msf-slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+/* ── Cost Preview ──────────────────────────────────────────────── */
+.msf-cost-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-6);
+}
+
+.msf-cost-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.msf-cost-value {
+  font-size: var(--font-size-2xl);
+  font-weight: 800;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Review ────────────────────────────────────────────────────── */
+.msf-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.msf-review-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-glass);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.msf-review-item.highlight {
+  border-color: var(--color-accent);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.msf-review-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.msf-review-value {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* ── Error Banner ──────────────────────────────────────────────── */
+.msf-error-banner {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-error-bg);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+}
+
+.form-input.error {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+/* ── Success ───────────────────────────────────────────────────── */
+.msf-success {
+  align-items: center;
+  text-align: center;
+}
+
+.msf-success-icon {
+  font-size: 4rem;
+  margin-bottom: var(--space-2);
+}
+
+/* ── Navigation ────────────────────────────────────────────────── */
+.msf-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-6);
+}
+
+/* ── Spinner ───────────────────────────────────────────────────── */
+.msf-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: var(--radius-full);
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .msf-body { padding: var(--space-6); }
+  .msf-option-grid { grid-template-columns: repeat(2, 1fr); }
+  .msf-db-grid { grid-template-columns: 1fr; }
+  .msf-review-grid { grid-template-columns: 1fr; }
+  .msf-progress-line { width: 40px; }
+}
