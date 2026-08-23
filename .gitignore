@@ -55,7 +55,14 @@ desktop.ini
 # Docker
 *.log
 
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+idp_dev.db
+
 # Coverage
 htmlcov/
 .coverage
 coverage.xml
+

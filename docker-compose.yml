@@ -29,7 +29,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://idp_user:idp_secret@postgres:5432/idp_db
       CORS_ORIGINS: '["http://localhost:5173"]'
       JWT_SECRET_KEY: dev-secret-key-change-in-production
-      GEMINI_API_KEY: your key
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
