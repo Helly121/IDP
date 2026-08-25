@@ -1,11 +1,6 @@
 /**
- * MultiStepForm — Premium animated project creation wizard.
- *
- * Steps:
- *   1. Service Info (name, description)
- *   2. Tech Stack (language, framework)
- *   3. Infrastructure (database, replicas)
- *   4. Review & Submit
+ * MultiStepForm — DevHub (Internal Developer Platform)
+ * Exact Spotify Portal 2-Column "Try-Portal" Layout (Screenshot 1)
  */
 
 import { useState, useCallback } from 'react';
@@ -13,12 +8,12 @@ import api from '../../api/client';
 import './MultiStepForm.css';
 
 const LANGUAGES = [
-  { value: 'python', label: 'Python', icon: '🐍' },
-  { value: 'javascript', label: 'JavaScript', icon: '⚡' },
-  { value: 'typescript', label: 'TypeScript', icon: '💎' },
-  { value: 'java', label: 'Java', icon: '☕' },
-  { value: 'go', label: 'Go', icon: '🔷' },
-  { value: 'rust', label: 'Rust', icon: '🦀' },
+  { value: 'python', label: 'Python (FastAPI, Django, Flask)' },
+  { value: 'javascript', label: 'JavaScript (Node.js, Express, Hono)' },
+  { value: 'typescript', label: 'TypeScript (NestJS, Hono, Express)' },
+  { value: 'go', label: 'Go (Gin, Echo, Fiber)' },
+  { value: 'rust', label: 'Rust (Actix, Axum, Rocket)' },
+  { value: 'java', label: 'Java (Spring Boot, Quarkus)' },
 ];
 
 const FRAMEWORKS = {
@@ -31,33 +26,25 @@ const FRAMEWORKS = {
 };
 
 const DATABASES = [
-  { value: 'postgres', label: 'PostgreSQL', icon: '🐘', desc: 'Relational, ACID-compliant' },
-  { value: 'mongodb', label: 'MongoDB', icon: '🍃', desc: 'Document store, flexible schema' },
-  { value: 'redis', label: 'Redis', icon: '⚡', desc: 'In-memory cache & store' },
-  { value: 'none', label: 'None', icon: '∅', desc: 'No database needed' },
-];
-
-const STEPS = [
-  { id: 1, title: 'Service Info', icon: '📋' },
-  { id: 2, title: 'Tech Stack', icon: '⚙️' },
-  { id: 3, title: 'Infrastructure', icon: '☁️' },
-  { id: 4, title: 'Review', icon: '✓' },
+  { value: 'postgres', label: 'PostgreSQL — Relational ACID (Dedicated)' },
+  { value: 'mongodb', label: 'MongoDB — Document Store (Replica Set)' },
+  { value: 'redis', label: 'Redis — In-Memory Cache (High-Throughput)' },
+  { value: 'none', label: 'Stateless Service — No Database' },
 ];
 
 export default function MultiStepForm() {
-  const [step, setStep] = useState(1);
-  const [direction, setDirection] = useState('right');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState({});
+  const [agreed, setAgreed] = useState(true);
 
   const [formData, setFormData] = useState({
     service_name: '',
     description: '',
-    language: '',
-    framework: '',
-    db_type: 'none',
-    replicas: 1,
+    language: 'python',
+    framework: 'FastAPI',
+    db_type: 'postgres',
+    replicas: 2,
   });
 
   const updateField = useCallback((field, value) => {
@@ -65,36 +52,31 @@ export default function MultiStepForm() {
     setErrors((prev) => ({ ...prev, [field]: null }));
   }, []);
 
-  // ── Validation ──────────────────────────────────────────────
-  const validateStep = (stepNum) => {
+  const estimateCost = () => {
+    const base = 15;
+    const replicaCost = (formData.replicas || 1) * 10;
+    const dbCost = formData.db_type === 'postgres' ? 25 : formData.db_type === 'mongodb' ? 30 : formData.db_type === 'redis' ? 15 : 0;
+    return base + replicaCost + dbCost;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     const errs = {};
-    if (stepNum === 1) {
-      if (!formData.service_name.trim()) {
-        errs.service_name = 'Service name is required';
-      } else if (!/^[a-z][a-z0-9-]{0,98}[a-z0-9]$/.test(formData.service_name)) {
-        errs.service_name = 'Must be lowercase, start with a letter, use hyphens only (e.g., my-api)';
-      }
+    if (!formData.service_name.trim()) {
+      errs.service_name = 'Service name is required';
+    } else if (!/^[a-z][a-z0-9-]{0,98}[a-z0-9]$/.test(formData.service_name)) {
+      errs.service_name = 'Must be lowercase, start with letter, use hyphens (e.g. order-service)';
     }
-    if (stepNum === 2) {
-      if (!formData.language) errs.language = 'Select a language';
+
+    if (!formData.language) {
+      errs.language = 'Language selection is required';
     }
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
 
-  const nextStep = () => {
-    if (validateStep(step)) {
-      setDirection('right');
-      setStep((s) => Math.min(s + 1, 4));
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      return;
     }
-  };
 
-  const prevStep = () => {
-    setDirection('left');
-    setStep((s) => Math.max(s - 1, 1));
-  };
-
-  const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
       const payload = {
@@ -103,8 +85,6 @@ export default function MultiStepForm() {
       };
       const res = await api.createProject(payload);
       setResult(res);
-      setDirection('right');
-      setStep(5); // Success view
     } catch (err) {
       setErrors({ submit: err.message });
     } finally {
@@ -116,297 +96,280 @@ export default function MultiStepForm() {
     setFormData({
       service_name: '',
       description: '',
-      language: '',
-      framework: '',
-      db_type: 'none',
-      replicas: 1,
+      language: 'python',
+      framework: 'FastAPI',
+      db_type: 'postgres',
+      replicas: 2,
     });
-    setStep(1);
     setResult(null);
     setErrors({});
   };
 
-  // ── Cost estimate preview ───────────────────────────────────
-  const estimateCost = () => {
-    const baseCost = formData.replicas * 2.5;
-    const dbCosts = { postgres: 10, mongodb: 12, redis: 5, none: 0 };
-    return (baseCost + (dbCosts[formData.db_type] || 0)).toFixed(2);
-  };
-
   return (
-    <div className="msf-container animate-fade-in">
-      {/* ── Progress Bar ─────────────────────────────────────── */}
-      {step <= 4 && (
-        <div className="msf-progress">
-          {STEPS.map((s, i) => (
-            <div
-              key={s.id}
-              className={`msf-progress-step ${step >= s.id ? 'active' : ''} ${step === s.id ? 'current' : ''}`}
-            >
-              <div className="msf-progress-dot">
-                {step > s.id ? '✓' : s.icon}
-              </div>
-              <span className="msf-progress-label">{s.title}</span>
-              {i < STEPS.length - 1 && (
-                <div className={`msf-progress-line ${step > s.id ? 'filled' : ''}`} />
-              )}
+    <div className="try-portal-container container">
+      {/* ── Main 2-Column Outer Box (Screenshot 1) ─────────────── */}
+      <div className="try-portal-box">
+        {/* ── Left Column: Value Proposition & Quote ──────────── */}
+        <div className="try-left-card">
+          <div className="try-left-header">
+            {/* Eclipse Logo Mark */}
+            <div className="try-eclipse-icon">
+              <svg width="36" height="36" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="16" cy="16" r="14" stroke="#ffffff" strokeWidth="2.5" />
+                <path
+                  d="M16 4C9.37258 4 4 9.37258 4 16C4 22.6274 9.37258 28 16 28C22.6274 28 28 22.6274 28 16C28 12.5 26.5 9 24 6.5C21.5 4 18.5 4 16 4Z"
+                  fill="#ffffff"
+                />
+                <circle cx="18.5" cy="14.5" r="9.5" fill="#12141c" />
+              </svg>
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* ── Form Steps ───────────────────────────────────────── */}
-      <div className="msf-body glass-card">
-        <div
-          className={`msf-step-content ${direction === 'right' ? 'animate-slide-left' : 'animate-slide-right'}`}
-          key={step}
-        >
-          {/* Step 1: Service Info */}
-          {step === 1 && (
-            <div className="msf-step">
-              <div className="msf-step-header">
-                <h2 className="msf-step-title">Name Your Service</h2>
-                <p className="msf-step-subtitle">
-                  Choose a unique, DNS-safe name for your cloud service.
-                </p>
+            <h2 className="try-left-title">
+              See what DevHub can do for your engineering team
+            </h2>
+
+            <p className="try-left-desc">
+              DevHub is an internal developer portal (IDP) powered by Kubernetes & AI —
+              fully managed, automated, and customized for high-velocity software engineering.
+            </p>
+          </div>
+
+          <div className="try-left-bullets">
+            <h4 className="try-bullets-title">What to expect:</h4>
+            <ul className="try-bullets-list">
+              <li>• A tailored look at DevHub’s software catalog, namespaces, and AI capabilities</li>
+              <li>• Best practices from platform teams who’ve already scaled microservices</li>
+              <li>• Automated CI/CD pipelines and declarative GitOps delivery</li>
+              <li>• Instant answers and AI diagnosis for your hardest cluster questions</li>
+            </ul>
+          </div>
+
+          {/* Testimonial Quote Box */}
+          <div className="try-testimonial-card">
+            <span className="testimonial-role">Director of Platform Engineering</span>
+            <p className="testimonial-quote">
+              “DevHub is allowing us to actually surface cloud infrastructure that hasn’t been
+              possible in the past, which is super exciting, all within the context of our applications.”
+            </p>
+            <div className="testimonial-company-pill">
+              Academic IDP
+            </div>
+          </div>
+
+          {/* Partner / Tech Bar */}
+          <div className="try-tech-footer">
+            <span className="tech-badge">FastAPI</span>
+            <span className="tech-badge">PostgreSQL</span>
+            <span className="tech-badge">Kubernetes</span>
+            <span className="tech-badge">ArgoCD</span>
+          </div>
+        </div>
+
+        {/* ── Right Column: Interactive Provisioning Form ──────── */}
+        <div className="try-right-form">
+          {result ? (
+            /* Success State */
+            <div className="try-success-view animate-fade-in">
+              <div className="try-success-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#000000" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
               </div>
-              <div className="msf-fields">
-                <div className="form-group">
+
+              <h3 className="try-success-title">Service Provisioned Successfully!</h3>
+              <p className="try-success-sub">
+                Workload <strong>idp-{result.project?.service_name || formData.service_name}</strong> is now registered and reconciling in the cluster.
+              </p>
+
+              <div className="try-spec-summary">
+                <div className="spec-row">
+                  <span className="spec-label">Service ID</span>
+                  <span className="spec-val">{result.project?.id?.slice(0, 12) || 'Generated'}...</span>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Namespace</span>
+                  <span className="spec-val text-green">{result.namespace || `idp-${formData.service_name}`}</span>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Deployment Status</span>
+                  <span className="spec-val text-green">{result.status || 'Active'}</span>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Monthly Allocation</span>
+                  <span className="spec-val">${result.cost_estimate || estimateCost()} / mo</span>
+                </div>
+              </div>
+
+              <button className="btn btn-pill-submit" onClick={resetForm} style={{ marginTop: '2rem' }}>
+                Provision Another Service
+              </button>
+            </div>
+          ) : (
+            /* Main Form */
+            <form onSubmit={handleSubmit} className="try-form-body">
+              {/* Row 1: Service Name & Namespace */}
+              <div className="try-form-row">
+                <div className="form-group flex-1">
                   <label className="form-label" htmlFor="service_name">
-                    Service Name *
+                    Service Name*
                   </label>
                   <input
                     id="service_name"
-                    className={`form-input ${errors.service_name ? 'error' : ''}`}
+                    className="form-input"
                     type="text"
-                    placeholder="e.g., my-flask-api"
+                    placeholder="e.g. auth-service"
                     value={formData.service_name}
-                    onChange={(e) => updateField('service_name', e.target.value.toLowerCase())}
+                    onChange={(e) => updateField('service_name', e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                    required
                   />
                   {errors.service_name && (
                     <span className="form-error">{errors.service_name}</span>
                   )}
                 </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="description">
-                    Description (optional)
+
+                <div className="form-group flex-1">
+                  <label className="form-label" htmlFor="namespace">
+                    Target Namespace*
                   </label>
                   <input
-                    id="description"
+                    id="namespace"
                     className="form-input"
                     type="text"
-                    placeholder="Brief description of your project"
-                    value={formData.description}
-                    onChange={(e) => updateField('description', e.target.value)}
+                    readOnly
+                    value={`idp-${formData.service_name || 'service'}`}
+                    style={{ background: '#f3f4f6', color: '#4b5563' }}
                   />
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Step 2: Tech Stack */}
-          {step === 2 && (
-            <div className="msf-step">
-              <div className="msf-step-header">
-                <h2 className="msf-step-title">Choose Your Stack</h2>
-                <p className="msf-step-subtitle">
-                  Select the language and framework for your application.
-                </p>
+              {/* Row 2: Description */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="description">
+                  Workload Description*
+                </label>
+                <input
+                  id="description"
+                  className="form-input"
+                  type="text"
+                  placeholder="Primary responsibility and architectural scope..."
+                  value={formData.description}
+                  onChange={(e) => updateField('description', e.target.value)}
+                />
               </div>
-              <div className="msf-fields">
-                <div className="form-group">
-                  <label className="form-label">Language *</label>
-                  <div className="msf-option-grid">
-                    {LANGUAGES.map((lang) => (
-                      <button
-                        key={lang.value}
-                        type="button"
-                        className={`msf-option-card ${formData.language === lang.value ? 'selected' : ''}`}
-                        onClick={() => {
-                          updateField('language', lang.value);
-                          updateField('framework', '');
-                        }}
-                      >
-                        <span className="msf-option-icon">{lang.icon}</span>
-                        <span className="msf-option-label">{lang.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {errors.language && (
-                    <span className="form-error">{errors.language}</span>
-                  )}
-                </div>
 
-                {formData.language && (
-                  <div className="form-group animate-fade-in">
-                    <label className="form-label" htmlFor="framework">Framework</label>
-                    <select
-                      id="framework"
-                      className="form-select"
-                      value={formData.framework}
-                      onChange={(e) => updateField('framework', e.target.value)}
-                    >
-                      <option value="">Select a framework...</option>
-                      {(FRAMEWORKS[formData.language] || []).map((fw) => (
-                        <option key={fw} value={fw}>{fw}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Infrastructure */}
-          {step === 3 && (
-            <div className="msf-step">
-              <div className="msf-step-header">
-                <h2 className="msf-step-title">Configure Infrastructure</h2>
-                <p className="msf-step-subtitle">
-                  Select database and scaling options for your deployment.
-                </p>
-              </div>
-              <div className="msf-fields">
-                <div className="form-group">
-                  <label className="form-label">Database</label>
-                  <div className="msf-db-grid">
-                    {DATABASES.map((db) => (
-                      <button
-                        key={db.value}
-                        type="button"
-                        className={`msf-db-card ${formData.db_type === db.value ? 'selected' : ''}`}
-                        onClick={() => updateField('db_type', db.value)}
-                      >
-                        <span className="msf-db-icon">{db.icon}</span>
-                        <span className="msf-db-label">{db.label}</span>
-                        <span className="msf-db-desc">{db.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="replicas">
-                    Replicas: <strong>{formData.replicas}</strong>
+              {/* Row 3: Language & Framework */}
+              <div className="try-form-row">
+                <div className="form-group flex-1">
+                  <label className="form-label" htmlFor="language">
+                    Primary Language*
                   </label>
-                  <input
-                    id="replicas"
-                    className="msf-slider"
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={formData.replicas}
-                    onChange={(e) => updateField('replicas', parseInt(e.target.value))}
-                  />
-                  <div className="msf-slider-labels">
-                    <span>1</span>
-                    <span>5</span>
-                    <span>10</span>
-                  </div>
+                  <select
+                    id="language"
+                    className="form-select"
+                    value={formData.language}
+                    onChange={(e) => {
+                      updateField('language', e.target.value);
+                      updateField('framework', (FRAMEWORKS[e.target.value] || [])[0] || 'None');
+                    }}
+                  >
+                    {LANGUAGES.map((l) => (
+                      <option key={l.value} value={l.value}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="msf-cost-preview glass">
-                  <span className="msf-cost-label">Estimated Monthly Cost</span>
-                  <span className="msf-cost-value">${estimateCost()}</span>
+                <div className="form-group flex-1">
+                  <label className="form-label" htmlFor="framework">
+                    Framework Scaffolding*
+                  </label>
+                  <select
+                    id="framework"
+                    className="form-select"
+                    value={formData.framework}
+                    onChange={(e) => updateField('framework', e.target.value)}
+                  >
+                    {(FRAMEWORKS[formData.language] || ['None']).map((fw) => (
+                      <option key={fw} value={fw}>
+                        {fw}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Step 4: Review */}
-          {step === 4 && (
-            <div className="msf-step">
-              <div className="msf-step-header">
-                <h2 className="msf-step-title">Review & Deploy</h2>
-                <p className="msf-step-subtitle">
-                  Confirm your project configuration before provisioning.
-                </p>
+              {/* Row 4: Database Tier */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="db_type">
+                  Database Persistence Tier*
+                </label>
+                <select
+                  id="db_type"
+                  className="form-select"
+                  value={formData.db_type}
+                  onChange={(e) => updateField('db_type', e.target.value)}
+                >
+                  {DATABASES.map((db) => (
+                    <option key={db.value} value={db.value}>
+                      {db.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="msf-review">
-                <div className="msf-review-grid">
-                  <ReviewItem label="Service Name" value={formData.service_name} />
-                  <ReviewItem label="Description" value={formData.description || '—'} />
-                  <ReviewItem
-                    label="Language"
-                    value={LANGUAGES.find((l) => l.value === formData.language)?.label}
-                  />
-                  <ReviewItem label="Framework" value={formData.framework || 'None'} />
-                  <ReviewItem
-                    label="Database"
-                    value={DATABASES.find((d) => d.value === formData.db_type)?.label}
-                  />
-                  <ReviewItem label="Replicas" value={formData.replicas} />
-                  <ReviewItem label="Est. Cost" value={`$${estimateCost()}/mo`} highlight />
-                  <ReviewItem label="Namespace" value={`idp-${formData.service_name}`} />
+
+              {/* Row 5: Pod Replicas */}
+              <div className="form-group">
+                <div className="try-slider-header">
+                  <label className="form-label" htmlFor="replicas">
+                    Kubernetes Pod Replicas: <strong>{formData.replicas} Pods</strong>
+                  </label>
+                  <span className="try-cost-badge">Est. ${estimateCost()} / mo</span>
                 </div>
-                {errors.submit && (
-                  <div className="msf-error-banner">{errors.submit}</div>
-                )}
+                <input
+                  id="replicas"
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={formData.replicas}
+                  onChange={(e) => updateField('replicas', parseInt(e.target.value))}
+                  style={{ width: '100%', accentColor: '#1ed760', cursor: 'pointer' }}
+                />
               </div>
-            </div>
-          )}
 
-          {/* Step 5: Success */}
-          {step === 5 && result && (
-            <div className="msf-step msf-success">
-              <div className="msf-success-icon animate-scale-in">🚀</div>
-              <h2 className="msf-step-title">Project Created!</h2>
-              <p className="msf-step-subtitle">
-                Your project <strong>{result.project?.service_name}</strong> is being provisioned.
-              </p>
-              <div className="msf-review-grid" style={{ marginTop: '1.5rem' }}>
-                <ReviewItem label="Project ID" value={result.project?.id?.slice(0, 8) + '…'} />
-                <ReviewItem label="Status" value={result.status} highlight />
-                <ReviewItem label="Namespace" value={result.namespace} />
-                <ReviewItem label="Cost" value={`$${result.cost_estimate}/mo`} />
+              {/* Agreement Checkbox (Screenshot 1 Style) */}
+              <div className="try-checkbox-row">
+                <input
+                  type="checkbox"
+                  id="agree"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  style={{ accentColor: '#1ed760', width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <label htmlFor="agree" className="try-checkbox-label">
+                  I agree to provision this cloud service in accordance with DevHub infrastructure governance and cluster resource policies.
+                </label>
               </div>
-              <button className="btn btn-primary btn-lg" onClick={resetForm} style={{ marginTop: '2rem' }}>
-                Create Another Project
+
+              {/* Error Banner */}
+              {errors.submit && (
+                <div className="form-error" style={{ marginBottom: '1rem' }}>
+                  {errors.submit}
+                </div>
+              )}
+
+              {/* Mint Green Submit Pill Button (Screenshot 1 Style) */}
+              <button
+                type="submit"
+                className="btn btn-pill-submit"
+                disabled={isSubmitting || !agreed}
+              >
+                {isSubmitting ? 'Provisioning Cloud Workload...' : 'Submit'}
               </button>
-            </div>
+            </form>
           )}
         </div>
       </div>
-
-      {/* ── Navigation ───────────────────────────────────────── */}
-      {step <= 4 && (
-        <div className="msf-nav">
-          <button
-            className="btn btn-secondary"
-            onClick={prevStep}
-            disabled={step === 1}
-          >
-            ← Back
-          </button>
-
-          {step < 4 ? (
-            <button className="btn btn-primary" onClick={nextStep}>
-              Continue →
-            </button>
-          ) : (
-            <button
-              className="btn btn-primary btn-lg"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <span className="msf-spinner" />
-              ) : (
-                '🚀 Deploy Project'
-              )}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReviewItem({ label, value, highlight }) {
-  return (
-    <div className={`msf-review-item ${highlight ? 'highlight' : ''}`}>
-      <span className="msf-review-label">{label}</span>
-      <span className="msf-review-value">{value}</span>
     </div>
   );
 }
