@@ -1,368 +1,285 @@
-/* ── Multi-Step Form ───────────────────────────────────────────── */
-
-.msf-container {
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-/* ── Progress Bar ──────────────────────────────────────────────── */
-.msf-progress {
+/* ── Try-Portal Form Container (Screenshot 1 Style) ─────────────── */
+.try-portal-container {
+  padding: var(--space-8) var(--space-4) var(--space-16);
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: var(--space-6) 0;
-  margin-bottom: var(--space-4);
 }
 
-.msf-progress-step {
-  display: flex;
-  align-items: center;
-  position: relative;
-}
-
-.msf-progress-dot {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-lg);
-  background: var(--color-bg-tertiary);
-  border: 2px solid var(--color-border);
-  transition: all var(--transition-base);
-  position: relative;
-  z-index: 2;
-}
-
-.msf-progress-step.active .msf-progress-dot {
-  border-color: var(--color-accent);
-  background: rgba(99, 102, 241, 0.15);
-}
-
-.msf-progress-step.current .msf-progress-dot {
-  border-color: var(--color-accent);
-  background: var(--gradient-primary);
-  box-shadow: var(--shadow-glow);
-  transform: scale(1.1);
-}
-
-.msf-progress-label {
-  position: absolute;
-  bottom: -24px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  font-weight: 500;
-  transition: color var(--transition-fast);
-}
-
-.msf-progress-step.active .msf-progress-label {
-  color: var(--color-text-secondary);
-}
-
-.msf-progress-step.current .msf-progress-label {
-  color: var(--color-accent);
-}
-
-.msf-progress-line {
-  width: 80px;
-  height: 2px;
-  background: var(--color-border);
-  margin: 0 var(--space-2);
-  transition: background var(--transition-base);
-  position: relative;
-  z-index: 1;
-}
-
-.msf-progress-line.filled {
-  background: var(--gradient-primary);
-}
-
-/* ── Form Body ─────────────────────────────────────────────────── */
-.msf-body {
-  padding: var(--space-10);
-  min-height: 360px;
-  display: flex;
-  align-items: stretch;
-}
-
-.msf-step-content {
+/* ── Main Outer Box ─────────────────────────────────────────────── */
+.try-portal-box {
   width: 100%;
+  max-width: 1180px;
+  background: rgba(22, 25, 36, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.1);
+  backdrop-filter: blur(28px);
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  padding: 2.25rem;
+  gap: 2.5rem;
 }
 
-.msf-step {
+/* ── Left Column: Dark Info Panel ───────────────────────────────── */
+.try-left-card {
+  background: #12141c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 2.5rem;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  justify-content: space-between;
+  gap: 1.75rem;
 }
 
-.msf-step-header {
-  text-align: center;
-  margin-bottom: var(--space-2);
+.try-left-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.msf-step-title {
-  font-size: var(--font-size-2xl);
+.try-eclipse-icon {
+  display: flex;
+  margin-bottom: 0.25rem;
+}
+
+.try-left-title {
+  font-size: 2.15rem;
+  font-weight: 900;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  color: #ffffff;
+}
+
+.try-left-desc {
+  font-size: 0.92rem;
+  color: #a1a1aa;
+  line-height: 1.6;
+}
+
+.try-left-bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.try-bullets-title {
+  font-size: 0.85rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: var(--space-2);
+  color: #ffffff;
+  letter-spacing: -0.01em;
 }
 
-.msf-step-subtitle {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-}
-
-.msf-fields {
+.try-bullets-list {
+  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #a1a1aa;
+  line-height: 1.5;
 }
 
-/* ── Option Grid (Languages) ───────────────────────────────────── */
-.msf-option-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
-}
-
-.msf-option-card {
+/* ── Testimonial Quote Box ──────────────────────────────────────── */
+.try-testimonial-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
   display: flex;
   flex-direction: column;
+  gap: 0.65rem;
+}
+
+.testimonial-role {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #d1d5db;
+}
+
+.testimonial-quote {
+  font-size: 0.82rem;
+  color: #9ca3af;
+  line-height: 1.5;
+  font-style: normal;
+}
+
+.testimonial-company-pill {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #1ed760;
+  background: rgba(30, 215, 96, 0.1);
+  border: 1px solid rgba(30, 215, 96, 0.25);
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius-full);
+}
+
+/* ── Tech Badges ────────────────────────────────────────────────── */
+.try-tech-footer {
+  display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-3);
-  background: var(--color-bg-glass);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  font-family: var(--font-family);
-  color: var(--color-text-secondary);
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.msf-option-card:hover {
-  background: var(--color-bg-glass-hover);
-  border-color: rgba(255, 255, 255, 0.15);
-  transform: translateY(-2px);
-}
-
-.msf-option-card.selected {
-  background: rgba(99, 102, 241, 0.12);
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
-}
-
-.msf-option-icon {
-  font-size: var(--font-size-2xl);
-}
-
-.msf-option-label {
-  font-size: var(--font-size-sm);
+.tech-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
   font-weight: 600;
+  color: #71717a;
 }
 
-/* ── Database Grid ─────────────────────────────────────────────── */
-.msf-db-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
-}
-
-.msf-db-card {
+/* ── Right Column: Form Body ────────────────────────────────────── */
+.try-right-form {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  padding: 0.5rem 0.5rem 0.5rem 0;
+}
+
+.try-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.try-form-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.try-slider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.try-cost-badge {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1ed760;
+  background: rgba(30, 215, 96, 0.1);
+  border: 1px solid rgba(30, 215, 96, 0.3);
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius-full);
+}
+
+.try-checkbox-row {
+  display: flex;
   align-items: flex-start;
-  gap: var(--space-1);
-  padding: var(--space-4);
-  background: var(--color-bg-glass);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  font-family: var(--font-family);
-  text-align: left;
-  color: var(--color-text-primary);
+  gap: 0.75rem;
+  margin: 0.5rem 0;
 }
 
-.msf-db-card:hover {
-  background: var(--color-bg-glass-hover);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.msf-db-card.selected {
-  background: rgba(99, 102, 241, 0.12);
-  border-color: var(--color-accent);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
-}
-
-.msf-db-icon { font-size: var(--font-size-xl); }
-
-.msf-db-label {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-}
-
-.msf-db-desc {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
-
-/* ── Slider ────────────────────────────────────────────────────── */
-.msf-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 6px;
-  background: var(--color-border);
-  border-radius: var(--radius-full);
-  outline: none;
+.try-checkbox-label {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  line-height: 1.45;
   cursor: pointer;
 }
 
-.msf-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-full);
-  background: var(--gradient-primary);
-  border: 2px solid white;
-  box-shadow: var(--shadow-glow);
-  cursor: pointer;
-  transition: transform var(--transition-fast);
-}
-
-.msf-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
-
-.msf-slider-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  margin-top: var(--space-1);
-}
-
-/* ── Cost Preview ──────────────────────────────────────────────── */
-.msf-cost-preview {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4) var(--space-6);
-}
-
-.msf-cost-label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-}
-
-.msf-cost-value {
-  font-size: var(--font-size-2xl);
-  font-weight: 800;
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* ── Review ────────────────────────────────────────────────────── */
-.msf-review-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
-}
-
-.msf-review-item {
+/* ── Success View in Right Panel ────────────────────────────────── */
+.try-success-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-glass);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-}
-
-.msf-review-item.highlight {
-  border-color: var(--color-accent);
-  background: rgba(99, 102, 241, 0.08);
-}
-
-.msf-review-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
-}
-
-.msf-review-value {
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-/* ── Error Banner ──────────────────────────────────────────────── */
-.msf-error-banner {
-  margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-error-bg);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: var(--radius-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
-
-.form-input.error {
-  border-color: var(--color-error);
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
-}
-
-/* ── Success ───────────────────────────────────────────────────── */
-.msf-success {
   align-items: center;
   text-align: center;
+  padding: 2rem 1rem;
 }
 
-.msf-success-icon {
-  font-size: 4rem;
-  margin-bottom: var(--space-2);
-}
-
-/* ── Navigation ────────────────────────────────────────────────── */
-.msf-nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--space-6);
-}
-
-/* ── Spinner ───────────────────────────────────────────────────── */
-.msf-spinner {
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
+.try-success-icon {
+  width: 68px;
+  height: 68px;
   border-radius: var(--radius-full);
-  animation: spin 0.6s linear infinite;
+  background: #1ed760;
+  box-shadow: 0 0 32px rgba(30, 215, 96, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.try-success-title {
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
 }
 
-/* ── Responsive ────────────────────────────────────────────────── */
+.try-success-sub {
+  font-size: 0.95rem;
+  color: #a1a1aa;
+  margin-bottom: 2rem;
+}
+
+.try-spec-summary {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.spec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.spec-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.spec-label {
+  color: #9ca3af;
+}
+
+.spec-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.text-green {
+  color: #1ed760 !important;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .try-portal-box {
+    grid-template-columns: 1fr;
+    padding: 1.5rem;
+    gap: 2rem;
+  }
+}
+
 @media (max-width: 768px) {
-  .msf-body { padding: var(--space-6); }
-  .msf-option-grid { grid-template-columns: repeat(2, 1fr); }
-  .msf-db-grid { grid-template-columns: 1fr; }
-  .msf-review-grid { grid-template-columns: 1fr; }
-  .msf-progress-line { width: 40px; }
+  .try-portal-container {
+    padding: var(--space-4) var(--space-2) var(--space-8);
+  }
+  .try-left-card {
+    padding: 1.5rem;
+  }
+  .try-form-row {
+    flex-direction: column;
+  }
+  .try-left-title {
+    font-size: 1.75rem;
+  }
 }
