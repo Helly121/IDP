@@ -1,56 +1,62 @@
-# 🎓 Academic Internal Developer Platform (IDP)
+﻿# Academic Internal Developer Platform (IDP)
 
 A self-service Internal Developer Platform tailored for academic environments that automates end-to-end cloud infrastructure provisioning.
 
-## Architecture
+## Phase 1.5 Architecture (Agent-Driven)
+
+The platform utilizes an autonomous, agent-driven architecture powered by Gemini 2.0 and the Model Context Protocol (MCP). Instead of static wrappers, a DevSecOps AI Mentor actively manages provisioning and deployment via human-in-the-loop (HITL) approval gates.
 
 ```mermaid
 graph TB
     subgraph Presentation["Presentation Layer"]
         UI["React.js Self-Service Portal"]
+        AP["AI Agent Panel (SSE)"]
+        AD["Approvals Dashboard"]
     end
 
     subgraph Orchestration["Orchestration Layer"]
         API["FastAPI Backend"]
-        RBAC["RBAC Engine"]
-        DB["PostgreSQL"]
+        AGENT["Gemini AI Agent"]
+        HITL["Approval Engine"]
+        DB["PostgreSQL (pending_actions)"]
     end
 
-    subgraph Intelligence["Intelligence Layer"]
-        AI_MG["Manifest Generator<br/>(Gemini API)"]
-        AI_LA["Log Analyzer<br/>(Gemini API)"]
+    subgraph MCP["MCP Tool Servers"]
+        MCP_GH["GitHub Server"]
+        MCP_K8S["Kubernetes Server"]
+        MCP_ARGO["ArgoCD Server"]
+        MCP_POL["Policy/Cost Server"]
     end
 
     subgraph Execution["Execution Layer"]
-        GH["GitHub Actions CI"]
-        TF["Terraform IaC"]
+        GH["GitHub Repositories"]
         ARGO["ArgoCD GitOps"]
         K8S["Kubernetes Cluster"]
-        MON["Prometheus + Grafana"]
     end
 
     UI --> API
-    API --> RBAC
+    AP -- "SSE Stream" --> AGENT
+    AD --> HITL
     API --> DB
-    API --> AI_MG
-    API --> AI_LA
-    API --> GH
-    API --> TF
-    ARGO --> K8S
-    GH --> ARGO
-    TF --> K8S
-    K8S --> MON
+    
+    AGENT <--> |"Function Calling"| MCP
+    MCP --> HITL
+    
+    MCP_GH --> GH
+    MCP_K8S --> K8S
+    MCP_ARGO --> ARGO
 ```
 
 ## Project Structure
 
 ```
-├── frontend/          # React + Vite — Self-service portal
-├── backend/           # FastAPI — Orchestration layer
-├── iac/               # Terraform — Infrastructure as Code
-├── k8s/               # Kustomize manifests — ArgoCD target
-├── .github/workflows/ # GitHub Actions CI/CD
-└── docker-compose.yml # Local development environment
+├── frontend/           # React + Vite — Self-service portal & Agent UI
+├── backend/            # FastAPI — Orchestration & Agent loop
+│   ├── app/mcp_servers/ # Model Context Protocol Tool Integrations
+├── iac/                # Terraform — Infrastructure as Code
+├── k8s/                # Kustomize manifests — ArgoCD target
+├── .github/workflows/  # GitHub Actions CI/CD
+└── docker-compose.yml  # Local development environment
 ```
 
 ## Quick Start
@@ -60,6 +66,7 @@ graph TB
 - Node.js 20+
 - Docker & Docker Compose
 - Terraform 1.9+ (optional, for IaC validation)
+- Gemini API Key
 
 ### Local Development
 
@@ -67,40 +74,28 @@ graph TB
 # 1. Clone the repository
 git clone <repo-url> && cd <repo-name>
 
-# 2. Start all services with Docker Compose
-docker-compose up -d
+# 2. Add API Keys to .env
+# Required: GEMINI_API_KEY
+# Optional: GITHUB_TOKEN, KUBECONFIG, ARGOCD_TOKEN
 
-# 3. Access the platform
-#    Frontend:  http://localhost:5173
-#    Backend:   http://localhost:8000
-#    API Docs:  http://localhost:8000/docs
-```
+# 3. Start all services with Docker Compose
+docker-compose up -d --build
 
-### Manual Setup
-
-```bash
-# Backend
-cd backend
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-pip install -r requirements.txt
-cp .env.example .env
-python -m uvicorn app.main:app --reload --port 8000
-
-# Frontend
-cd frontend
-npm install
-npm run dev
+# 4. Access the platform
+#    Frontend:            http://localhost:5173
+#    Backend (API Docs):  http://localhost:8000/docs
 ```
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| POST | `/api/v1/agent/run` | Stream agent reasoning & tool calls (SSE) |
+| GET | `/api/v1/approvals/pending` | List HITL pending mutating actions |
+| POST | `/api/v1/approvals/{id}/approve` | Approve and execute a pending AI action |
+| POST | `/api/v1/approvals/{id}/reject` | Reject a pending AI action |
 | POST | `/api/v1/projects/create` | Create a new project from form data |
 | GET | `/api/v1/projects/{id}/status` | Get project deployment status |
-| POST | `/api/v1/ai/manifest-generate` | Generate K8s manifests via Gemini |
-| POST | `/api/v1/ai/log-analyze` | Analyze error logs via Gemini |
 | GET | `/api/v1/health` | Health check |
 
 ## Tech Stack
@@ -110,12 +105,11 @@ npm run dev
 | Frontend | React.js + Vite |
 | Backend | FastAPI (Python 3.12) |
 | Database | PostgreSQL + SQLAlchemy (async) |
-| Auth | JWT (stub for Phase 1) |
+| Agent | Google Gemini API (2.0 Flash) + MCP |
 | IaC | Terraform |
 | CI/CD | GitHub Actions |
 | GitOps | ArgoCD |
 | Orchestration | Kubernetes |
-| AI | Google Gemini API |
 | Monitoring | Prometheus + Grafana |
 
 ## License
