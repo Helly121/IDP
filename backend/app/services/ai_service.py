@@ -1,42 +1,275 @@
-"""
-AI service layer — integrates with Google Gemini API for:
-  1. Kubernetes manifest generation from project specifications
-  2. Error log analysis and diagnosis
+﻿"""
+AI Agent Orchestrator — Gemini-powered agentic loop with MCP tool calling.
 
-Falls back to template-based generation if the Gemini API key is not configured.
+Replaces the previous static prompt-wrapper with an autonomous agent that:
+1. Receives a user message
+2. Sends it to Gemini with all MCP tool declarations
+3. Processes function_call responses by dispatching to the correct MCP server
+4. For read-only tools: executes immediately and feeds results back to Gemini
+5. For mutating tools: creates a PendingAction and yields an approval_required event
+6. Loops until Gemini produces a final text response
+7. Yields structured SSE events at each step for the frontend to render live
 """
+
+from __future__ import annotations
 
 import json
 import logging
+import uuid
+from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
+from typing import Any
+
 from app.core.config import settings
+from app.core.database import async_session_factory
+from app.mcp_servers.registry import registry
+from app.schemas.agent import AgentEvent, AgentEventType
 from app.schemas.deployment import (
     ManifestRequest,
     ManifestResponse,
     LogAnalyzeRequest,
     LogAnalyzeResponse,
 )
+from app.services import approval_service
 
 logger = logging.getLogger(__name__)
 
-# ── Gemini client (lazy-loaded) ──────────────────────────────────
+# Gemini model and function-calling setup
 _gemini_model = None
 
 
 def _get_gemini_model():
+    """Lazily initialise the Gemini model with MCP tool declarations."""
     global _gemini_model
     if _gemini_model is None and settings.GEMINI_API_KEY:
         try:
             import google.generativeai as genai
 
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            _gemini_model = genai.GenerativeModel("gemini-3.6-flash")
-            logger.info("Gemini API client initialized successfully")
+
+            # Build tool declarations from the MCP registry
+            tool_declarations = registry.get_gemini_declarations()
+            logger.info("Registering %d tools with Gemini", len(tool_declarations))
+
+            _gemini_model = genai.GenerativeModel(
+                "gemini-2.0-flash",
+                tools=[{"function_declarations": tool_declarations}] if tool_declarations else None,
+                system_instruction=_build_system_prompt(),
+            )
+            logger.info("Gemini agent model initialized with function calling")
         except Exception as e:
-            logger.warning(f"Failed to initialize Gemini: {e}")
+            logger.warning("Failed to initialize Gemini agent: %s", e)
     return _gemini_model
 
 
-# ── Template-based fallback manifests ────────────────────────────
+def _build_system_prompt() -> str:
+    """Build the system prompt for the DevOps AI agent."""
+    return """You are an expert DevOps AI agent embedded in an Academic Internal Developer Platform (IDP).
+Your role is to help students, guides, and admins with:
+- Provisioning cloud infrastructure and Kubernetes resources
+- Generating Dockerfiles, Kubernetes manifests, and CI/CD pipelines
+- Diagnosing deployment failures (CrashLoopBackOff, ImagePullBackOff, OOMKilled)
+- Managing GitHub repositories and ArgoCD GitOps synchronisation
+- Enforcing institutional RBAC policies (student quotas vs faculty approvals)
+
+You have access to tools for GitHub, Kubernetes, ArgoCD, and the platform's policy engine.
+When a user asks you to do something:
+1. THINK about which tools you need and in what order
+2. Call the appropriate tools to gather information or take action
+3. Explain your reasoning and results clearly
+4. If a tool call fails, diagnose the issue and suggest alternatives
+
+For mutating actions (creating repos, applying manifests), the platform will require
+human approval before execution. This is normal — explain to the user that their
+request is pending approval.
+
+Always be concise, helpful, and security-conscious. Never expose secrets or credentials."""
+
+
+async def run_agent_stream(
+    message: str,
+    user_id: str,
+    project_id: str | None = None,
+    session_id: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Main entry point: run the agentic loop and yield SSE events.
+
+    Each yield is a fully-formatted SSE string (event + data + newlines).
+    """
+    sid = uuid.UUID(session_id) if session_id else uuid.uuid4()
+    uid = uuid.UUID(user_id)
+    now = lambda: datetime.now(timezone.utc)
+
+    # Yield: thinking
+    yield AgentEvent(
+        type=AgentEventType.THINKING,
+        data={"message": "Analyzing your request and determining the best approach..."},
+        timestamp=now(),
+    ).to_sse()
+
+    model = _get_gemini_model()
+    if model is None:
+        yield AgentEvent(
+            type=AgentEventType.ERROR,
+            data={"message": "AI agent is not available. Please configure GEMINI_API_KEY."},
+            timestamp=now(),
+        ).to_sse()
+        return
+
+    # Build initial context
+    context_parts = [message]
+    if project_id:
+        context_parts.append(f"\n[Context: This request is related to project ID {project_id}]")
+    context_parts.append(f"\n[User ID: {user_id}]")
+
+    try:
+        # Start a chat session for multi-turn tool calling
+        chat = model.start_chat(history=[])
+        response = chat.send_message("\n".join(context_parts))
+
+        # Agentic loop: keep processing until we get a text response
+        max_iterations = 10
+        iteration = 0
+
+        while iteration < max_iterations:
+            iteration += 1
+
+            # Check if the response contains function calls
+            candidate = response.candidates[0] if response.candidates else None
+            if candidate is None:
+                yield AgentEvent(
+                    type=AgentEventType.ERROR,
+                    data={"message": "No response from AI model"},
+                    timestamp=now(),
+                ).to_sse()
+                return
+
+            parts = candidate.content.parts if candidate.content else []
+
+            # Collect all function calls from this response
+            function_calls = [p for p in parts if hasattr(p, "function_call") and p.function_call]
+            text_parts = [p.text for p in parts if hasattr(p, "text") and p.text]
+
+            # If we only have text (no function calls), this is the final response
+            if not function_calls:
+                final_text = "\n".join(text_parts) if text_parts else "I've completed the analysis."
+                yield AgentEvent(
+                    type=AgentEventType.FINAL_RESPONSE,
+                    data={"message": final_text},
+                    timestamp=now(),
+                ).to_sse()
+                return
+
+            # Process each function call
+            from google.generativeai import protos
+
+            function_responses = []
+
+            for fc_part in function_calls:
+                fc = fc_part.function_call
+                tool_name = fc.name
+                tool_params = dict(fc.args) if fc.args else {}
+
+                # Yield: tool_call event
+                yield AgentEvent(
+                    type=AgentEventType.TOOL_CALL,
+                    data={
+                        "tool_name": tool_name,
+                        "params": tool_params,
+                        "is_mutating": registry.is_mutating(tool_name),
+                    },
+                    timestamp=now(),
+                ).to_sse()
+
+                # Check if this is a mutating tool
+                if registry.is_mutating(tool_name):
+                    # Create a pending action and yield approval_required
+                    async with async_session_factory() as db:
+                        action = await approval_service.create_pending_action(
+                            db=db,
+                            session_id=sid,
+                            user_id=uid,
+                            tool_name=tool_name,
+                            tool_params=tool_params,
+                        )
+                        await db.commit()
+
+                        yield AgentEvent(
+                            type=AgentEventType.APPROVAL_REQUIRED,
+                            data={
+                                "action_id": str(action.id),
+                                "tool_name": tool_name,
+                                "params": tool_params,
+                                "message": (
+                                    f"The action '{tool_name}' requires approval from a guide or admin. "
+                                    f"Action ID: {action.id}"
+                                ),
+                            },
+                            timestamp=now(),
+                        ).to_sse()
+
+                    # Feed back a "pending" result to Gemini so it can continue reasoning
+                    function_responses.append(
+                        protos.Part(
+                            function_response=protos.FunctionResponse(
+                                name=tool_name,
+                                response={
+                                    "result": {
+                                        "status": "pending_approval",
+                                        "action_id": str(action.id),
+                                        "message": "This mutating action requires human approval before execution. The request has been queued.",
+                                    }
+                                },
+                            )
+                        )
+                    )
+                else:
+                    # Read-only tool: execute immediately
+                    result = await registry.dispatch(tool_name, tool_params)
+
+                    # Yield: tool_result event
+                    yield AgentEvent(
+                        type=AgentEventType.TOOL_RESULT,
+                        data={
+                            "tool_name": tool_name,
+                            "success": result.success,
+                            "result": result.to_dict(),
+                        },
+                        timestamp=now(),
+                    ).to_sse()
+
+                    function_responses.append(
+                        protos.Part(
+                            function_response=protos.FunctionResponse(
+                                name=tool_name,
+                                response={"result": result.to_dict()},
+                            )
+                        )
+                    )
+
+            # Send all function responses back to Gemini for the next iteration
+            response = chat.send_message(function_responses)
+
+        # If we hit max iterations, yield a warning
+        yield AgentEvent(
+            type=AgentEventType.FINAL_RESPONSE,
+            data={"message": "I've reached the maximum number of reasoning steps. Here's what I've found so far."},
+            timestamp=now(),
+        ).to_sse()
+
+    except Exception as e:
+        logger.exception("Agent loop error")
+        yield AgentEvent(
+            type=AgentEventType.ERROR,
+            data={"message": f"Agent encountered an error: {str(e)}"},
+            timestamp=now(),
+        ).to_sse()
+
+
+# ========================================================================
+# Legacy API — kept for backward compatibility with existing endpoints
+# ========================================================================
 
 def _generate_deployment_yaml(req: ManifestRequest) -> str:
     return f"""apiVersion: apps/v1
@@ -123,19 +356,17 @@ spec:
 """
 
 
-# ── Public API ───────────────────────────────────────────────────
-
 async def generate_manifests(req: ManifestRequest) -> ManifestResponse:
-    """
-    Generate Kubernetes manifests. Uses Gemini if configured,
-    otherwise falls back to template-based generation.
-    """
+    """Legacy endpoint: generate K8s manifests (template-based fallback)."""
     model = _get_gemini_model()
 
     if model:
         try:
-            prompt = f"""You are a Kubernetes expert. Generate production-ready Kubernetes YAML manifests for the following application:
+            import google.generativeai as genai
 
+            # Use a simple non-agentic model for legacy endpoint
+            simple_model = genai.GenerativeModel("gemini-2.0-flash")
+            prompt = f"""You are a Kubernetes expert. Generate production-ready Kubernetes YAML manifests for:
 - Service Name: {req.service_name}
 - Language: {req.language}
 - Framework: {req.framework or 'none'}
@@ -144,31 +375,20 @@ async def generate_manifests(req: ManifestRequest) -> ManifestResponse:
 - Container Port: {req.port}
 - Container Image: ghcr.io/academic-idp/{req.service_name}:latest
 
-Generate three YAML documents:
-1. A Deployment with resource requests/limits, health probes, and security context
-2. A ClusterIP Service
-3. An Ingress resource
+Generate three YAML documents (Deployment, Service, Ingress).
+Return ONLY valid YAML. Separate each document with ---"""
 
-Return ONLY valid YAML. Separate each document with ---
-Include best-practice annotations, labels, and security settings.
-"""
-            response = model.generate_content(prompt)
+            response = simple_model.generate_content(prompt)
             parts = response.text.split("---")
-
-            deployment_yaml = parts[0].strip() if len(parts) > 0 else _generate_deployment_yaml(req)
-            service_yaml = parts[1].strip() if len(parts) > 1 else _generate_service_yaml(req)
-            ingress_yaml = parts[2].strip() if len(parts) > 2 else _generate_ingress_yaml(req)
-
             return ManifestResponse(
-                deployment_yaml=deployment_yaml,
-                service_yaml=service_yaml,
-                ingress_yaml=ingress_yaml,
+                deployment_yaml=parts[0].strip() if len(parts) > 0 else _generate_deployment_yaml(req),
+                service_yaml=parts[1].strip() if len(parts) > 1 else _generate_service_yaml(req),
+                ingress_yaml=parts[2].strip() if len(parts) > 2 else _generate_ingress_yaml(req),
                 notes="Generated with Google Gemini AI",
             )
         except Exception as e:
-            logger.error(f"Gemini manifest generation failed: {e}")
+            logger.error("Gemini manifest generation failed: %s", e)
 
-    # Fallback to templates
     return ManifestResponse(
         deployment_yaml=_generate_deployment_yaml(req),
         service_yaml=_generate_service_yaml(req),
@@ -178,42 +398,35 @@ Include best-practice annotations, labels, and security settings.
 
 
 async def analyze_logs(req: LogAnalyzeRequest) -> LogAnalyzeResponse:
-    """
-    Analyze Kubernetes error logs. Uses Gemini if configured,
-    otherwise returns a heuristic-based diagnosis.
-    """
+    """Legacy endpoint: analyze K8s error logs (heuristic fallback)."""
     model = _get_gemini_model()
 
     if model:
         try:
-            prompt = f"""You are a Kubernetes debugging expert. Analyze the following error logs and provide a diagnosis.
+            import google.generativeai as genai
+
+            simple_model = genai.GenerativeModel("gemini-2.0-flash")
+            prompt = f"""You are a Kubernetes debugging expert. Analyze these error logs:
 
 LOGS:
 {req.logs}
 
 {f"CONTEXT: {req.context}" if req.context else ""}
 
-Respond in valid JSON with this exact structure:
-{{
-  "diagnosis": "A clear, natural-language summary of what went wrong",
-  "root_cause": "The most likely root cause",
-  "suggested_actions": ["action1", "action2", "action3"],
-  "severity": "low|medium|high|critical"
-}}
+Respond in valid JSON:
+{{"diagnosis": "...", "root_cause": "...", "suggested_actions": ["..."], "severity": "low|medium|high|critical"}}
 
-Return ONLY the JSON object, no markdown fences or additional text.
-"""
-            response = model.generate_content(prompt)
+Return ONLY the JSON object."""
+
+            response = simple_model.generate_content(prompt)
             text = response.text.strip()
-            # Strip markdown code fences if present
             if text.startswith("```"):
                 text = text.split("\n", 1)[1]
                 text = text.rsplit("```", 1)[0]
             data = json.loads(text)
-
             return LogAnalyzeResponse(**data)
         except Exception as e:
-            logger.error(f"Gemini log analysis failed: {e}")
+            logger.error("Gemini log analysis failed: %s", e)
 
     # Heuristic fallback
     diagnosis = "Unable to determine — AI analysis unavailable"

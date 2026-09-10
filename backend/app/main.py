@@ -1,9 +1,10 @@
-"""
+﻿"""
 Academic IDP — FastAPI Application Entry Point
 
 Initializes the FastAPI app with:
 - CORS middleware for the React frontend
 - Lifespan events for database connection management
+- MCP Tool Registry initialization
 - v1 API router mount
 - Auto-generated OpenAPI documentation
 """
@@ -32,9 +33,21 @@ DEMO_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage startup and shutdown events."""
-    logger.info("🚀 Starting Academic IDP Backend...")
+    logger.info("🚀 Starting Academic IDP Backend v%s...", settings.APP_VERSION)
     await init_db()
-    logger.info("✅ Database tables created/verified")
+    logger.info("🗄 Database tables created/verified")
+
+    # Initialize MCP Tool Registry
+    from app.mcp_servers.registry import registry
+    registry.initialize(config_path=settings.MCP_CONFIG_PATH)
+    status = registry.get_server_status()
+    for name, info in status.items():
+        logger.info(
+            "🔧 MCP Server '%s': %d tools — %s",
+            name,
+            info["tool_count"],
+            ", ".join(info["tools"]),
+        )
 
     # Seed demo user if it doesn't exist
     async with async_session_factory() as session:
@@ -48,7 +61,7 @@ async def lifespan(app: FastAPI):
             )
             session.add(demo_user)
             await session.commit()
-            logger.info("✅ Demo user seeded (demo@academic-idp.dev)")
+            logger.info("👤 Demo user seeded (demo@academic-idp.dev)")
 
     yield
     logger.info("🛑 Shutting down...")
@@ -60,15 +73,15 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description=(
         "Self-service Internal Developer Platform for academic environments. "
-        "Automates cloud infrastructure provisioning with AI-powered manifest "
-        "generation and log analysis."
+        "Features an autonomous AI DevOps agent with MCP tool integration, "
+        "human-in-the-loop approval gates, and SSE streaming."
     ),
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
 )
 
-# ── CORS ──────────────────────────────────────────────────────────
+# ── CORS ──────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -77,7 +90,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Routes ────────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────
 app.include_router(api_router)
 
 

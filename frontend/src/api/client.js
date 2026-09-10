@@ -1,6 +1,6 @@
-/**
- * API client — Axios instance preconfigured for the FastAPI backend.
- * Base URL comes from VITE_API_BASE_URL environment variable.
+﻿/**
+ * API client — Fetch wrapper preconfigured for the FastAPI backend.
+ * Supports both standard JSON requests and SSE streaming for the agent.
  */
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -36,7 +36,7 @@ async function request(endpoint, options = {}) {
 
 /** API client methods */
 const api = {
-  // ── Projects ──────────────────────────────────────────────
+  // ── Projects ─────────────────────────────────────────
   createProject: (data) =>
     request('/api/v1/projects/create', {
       method: 'POST',
@@ -46,7 +46,7 @@ const api = {
   getProjectStatus: (projectId) =>
     request(`/api/v1/projects/${projectId}/status`),
 
-  // ── AI ────────────────────────────────────────────────────
+  // ── AI (Legacy) ──────────────────────────────────────
   generateManifest: (data) =>
     request('/api/v1/ai/manifest-generate', {
       method: 'POST',
@@ -59,7 +59,46 @@ const api = {
       body: JSON.stringify(data),
     }),
 
-  // ── Health ────────────────────────────────────────────────
+  // ── Agent (SSE Streaming) ────────────────────────────
+  runAgent: (message, context = {}) => {
+    const url = `${API_BASE}/api/v1/agent/run`;
+    const token = localStorage.getItem('idp_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    // Return raw Response for SSE streaming (caller reads via ReadableStream)
+    return fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        message,
+        user_id: context.user_id || '00000000-0000-0000-0000-000000000001',
+        project_id: context.project_id || null,
+        session_id: context.session_id || null,
+      }),
+    });
+  },
+
+  // ── Approvals ────────────────────────────────────────
+  listPendingApprovals: () =>
+    request('/api/v1/approvals/pending'),
+
+  listAllApprovals: (limit = 50) =>
+    request(`/api/v1/approvals/all?limit=${limit}`),
+
+  approveAction: (actionId, reviewerId) =>
+    request(`/api/v1/approvals/${actionId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ reviewer_id: reviewerId }),
+    }),
+
+  rejectAction: (actionId, reviewerId, reason = null) =>
+    request(`/api/v1/approvals/${actionId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reviewer_id: reviewerId, reason }),
+    }),
+
+  // ── Health ───────────────────────────────────────────
   healthCheck: () => request('/api/v1/health'),
 };
 

@@ -1,0 +1,344 @@
+﻿/* ======================================================
+   ApprovalsDashboard — Admin/Guide Approval Management
+   ====================================================== */
+
+.approvals-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.approvals-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.approvals-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0 0 6px;
+  letter-spacing: -0.02em;
+}
+
+.approvals-subtitle {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* ── Tabs ────────────────────────────────────────────── */
+.approvals-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  width: fit-content;
+}
+
+.tab-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn.active {
+  background: rgba(110, 231, 183, 0.1);
+  color: #6ee7b7;
+  border: 1px solid rgba(110, 231, 183, 0.15);
+}
+
+.tab-btn:hover:not(.active) {
+  color: #cbd5e1;
+}
+
+/* ── Error ───────────────────────────────────────────── */
+.approvals-error {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: #fca5a5;
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+}
+
+/* ── Loading ─────────────────────────────────────────── */
+.approvals-loading {
+  text-align: center;
+  padding: 60px 0;
+  color: #94a3b8;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(110, 231, 183, 0.1);
+  border-top-color: #6ee7b7;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Empty State ─────────────────────────────────────── */
+.approvals-empty {
+  text-align: center;
+  padding: 60px 24px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+}
+
+.approvals-empty h3 {
+  color: #f1f5f9;
+  margin: 0 0 8px;
+}
+
+.approvals-empty p {
+  color: #64748b;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* ── Table ───────────────────────────────────────────── */
+.approvals-table-wrapper {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.approvals-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.approvals-table th {
+  text-align: left;
+  padding: 14px 18px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.approvals-table td {
+  padding: 14px 18px;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.action-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.action-row.approved {
+  opacity: 0.7;
+}
+
+.action-row.rejected {
+  opacity: 0.6;
+}
+
+.tool-name-cell {
+  background: rgba(96, 165, 250, 0.1);
+  color: #93c5fd;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.td-time {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.td-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-approve {
+  background: rgba(110, 231, 183, 0.12) !important;
+  border: 1px solid rgba(110, 231, 183, 0.25) !important;
+  color: #6ee7b7 !important;
+  padding: 6px 14px !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-approve:hover:not(:disabled) {
+  background: rgba(110, 231, 183, 0.2) !important;
+}
+
+.btn-reject {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  color: #fca5a5 !important;
+  padding: 6px 14px !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-reject:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.18) !important;
+}
+
+.btn-expand-row {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.btn-expand-row:hover {
+  color: #94a3b8;
+}
+
+/* ── Detail Row ──────────────────────────────────────── */
+.detail-row td {
+  padding: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.detail-content {
+  padding: 16px 24px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.detail-section {
+  margin-bottom: 16px;
+}
+
+.detail-section h4 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin: 0 0 8px;
+}
+
+.detail-section pre {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  overflow-x: auto;
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.detail-meta {
+  display: flex;
+  gap: 20px;
+  font-size: 0.72rem;
+  color: #475569;
+  font-family: monospace;
+}
+
+/* ── Badges (reuse from global) ──────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.badge-success {
+  background: rgba(110, 231, 183, 0.1);
+  color: #6ee7b7;
+}
+.badge-success .badge-dot { background: #6ee7b7; }
+
+.badge-warning {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+.badge-warning .badge-dot { background: #fbbf24; }
+
+.badge-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+.badge-error .badge-dot { background: #fca5a5; }
+
+/* ── Button Overrides ────────────────────────────────── */
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+/* ── Responsive ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  .approvals-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .approvals-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .td-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+}

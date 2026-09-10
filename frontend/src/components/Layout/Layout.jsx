@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Layout — DevHub (Internal Developer Platform)
  * Exact Spotify for Backstage Navigation Bar & Shell
  */
@@ -84,6 +84,12 @@ export default function Layout({ children }) {
             >
               Create Service
             </Link>
+            <Link
+              to="/approvals"
+              className={`layout-nav-link ${location.pathname === '/approvals' ? 'active' : ''}`}
+            >
+              ⏳ Approvals
+            </Link>
             <a
               href="http://localhost:8000/docs"
               target="_blank"
@@ -91,14 +97,6 @@ export default function Layout({ children }) {
               className="layout-nav-link"
             >
               API Docs
-            </a>
-            <a
-              href="http://localhost:8000/redoc"
-              target="_blank"
-              rel="noreferrer"
-              className="layout-nav-link"
-            >
-              ReDoc
             </a>
           </nav>
 
