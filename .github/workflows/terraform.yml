@@ -1,0 +1,169 @@
+# ─────────────────────────────────────────────────────────────────
+# Academic IDP — Terraform CI/CD Pipeline
+#
+# Workflows for Infrastructure-as-Code:
+#   1. Pull Requests: Lint, format check, and validation (no secrets needed).
+#   2. Main Branch: Speculative plan generation.
+#   3. Deployment (Apply): Manual dispatch via protected environment.
+# ─────────────────────────────────────────────────────────────────
+
+name: Terraform CI/CD
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "iac/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "iac/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+      action:
+        description: "Terraform action to perform"
+        required: true
+        default: "plan"
+        type: choice
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Stage 1: Validate & Lint ─────────────────────────────────
+  validate:
+    name: Validate & Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Verify Terraform Version
+        run: terraform version
+
+      - name: Check Terraform Formatting
+        run: terraform fmt -check -recursive iac/
+
+      - name: Validate k8s-namespace Module
+        run: |
+          terraform -chdir=iac/modules/k8s-namespace init -backend=false
+          terraform -chdir=iac/modules/k8s-namespace validate
+
+      - name: Validate Dev Environment
+        run: |
+          terraform -chdir=iac/environments/dev init -backend=false
+          terraform -chdir=iac/environments/dev validate
+
+  # ── Stage 2: Speculative Plan ────────────────────────────────
+  plan:
+    name: Terraform Plan (${{ github.event.inputs.environment || 'dev' }})
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Initialize Terraform
+        run: |
+          ENV_DIR="iac/environments/${{ github.event.inputs.environment || 'dev' }}"
+          terraform -chdir=${ENV_DIR} init -backend=false
+
+      - name: Generate Speculative Plan
+        run: |
+          ENV_DIR="iac/environments/${{ github.event.inputs.environment || 'dev' }}"
+          terraform -chdir=${ENV_DIR} plan -no-color
+
+  # ── Stage 3: Protected Apply ─────────────────────────────────
+  apply:
+    name: Terraform Apply (${{ github.event.inputs.environment }})
+    runs-on: ubuntu-latest
+    needs: [validate, plan]
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply' && github.ref == 'refs/heads/main'
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Configure Target Kubernetes Cluster
+        id: k8s-setup
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_DATA }}
+        run: |
+          if [ -z "$KUBECONFIG_DATA" ]; then
+            echo "::error::KUBECONFIG_DATA secret is not configured in the '${{ github.event.inputs.environment }}' environment."
+            echo "An external Kubernetes cluster kubeconfig is required for Terraform apply in CI/CD."
+            exit 1
+          fi
+          
+          # Write runner kubeconfig securely without exposing contents in logs
+          KUBECONFIG_PATH="${RUNNER_TEMP}/kubeconfig.yaml"
+          if echo "$KUBECONFIG_DATA" | base64 -d >/dev/null 2>&1; then
+            echo "$KUBECONFIG_DATA" | base64 -d > "$KUBECONFIG_PATH"
+          else
+            echo "$KUBECONFIG_DATA" > "$KUBECONFIG_PATH"
+          fi
+          chmod 600 "$KUBECONFIG_PATH"
+          echo "kubeconfig_path=${KUBECONFIG_PATH}" >> "$GITHUB_OUTPUT"
+
+      - name: Initialize Terraform for Deployment
+        env:
+          TF_BACKEND_CONFIG: ${{ secrets.TF_BACKEND_CONFIG }}
+        run: |
+          ENV_DIR="iac/environments/${{ github.event.inputs.environment }}"
+          if [ -n "$TF_BACKEND_CONFIG" ]; then
+            echo "Initializing Terraform with remote backend configuration..."
+            echo "$TF_BACKEND_CONFIG" > "${RUNNER_TEMP}/backend.tfbackend"
+            terraform -chdir=${ENV_DIR} init -backend-config="${RUNNER_TEMP}/backend.tfbackend"
+          else
+            echo "::warning::No TF_BACKEND_CONFIG secret provided. Initializing with local state (ephemeral runner)."
+            terraform -chdir=${ENV_DIR} init -backend=false
+          fi
+
+      - name: Apply Terraform Configuration
+        env:
+          KUBECONFIG_PATH: ${{ steps.k8s-setup.outputs.kubeconfig_path }}
+        run: |
+          ENV_DIR="iac/environments/${{ github.event.inputs.environment }}"
+          echo "Executing Terraform apply against environment: ${{ github.event.inputs.environment }}"
+          terraform -chdir=${ENV_DIR} apply -auto-approve -no-color \
+            -var="kubeconfig_path=${KUBECONFIG_PATH}" \
+            -var="kube_context=default"
+
+      - name: Cleanup Credentials
+        if: always()
+        run: |
+          rm -f "${RUNNER_TEMP}/kubeconfig.yaml" "${RUNNER_TEMP}/backend.tfbackend"

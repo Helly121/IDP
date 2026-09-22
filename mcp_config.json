@@ -1,4 +1,4 @@
-﻿{
+{
   "servers": {
     "github": {
       "enabled": true,
@@ -30,6 +30,22 @@
       "enabled": true,
       "type": "local",
       "description": "Institution-specific RBAC policy engine and cost estimator"
+    },
+    "terraform": {
+      "enabled": true,
+      "type": "local",
+      "description": "Terraform IaC configuration management, formatting, validation, and planning",
+      "env": {
+        "IAC_DIR": "${IAC_DIR:-/app/iac}"
+      }
+    },
+    "cicd": {
+      "enabled": true,
+      "type": "local",
+      "description": "GitHub Actions CI/CD workflow management and validation",
+      "env": {
+        "WORKFLOWS_DIR": "${WORKFLOWS_DIR:-/app/.github/workflows}"
+      }
     }
   }
 }

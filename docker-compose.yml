@@ -1,4 +1,4 @@
-﻿services:
+services:
   postgres:
     image: postgres:16-alpine
     container_name: idp-postgres
@@ -36,11 +36,16 @@
       ARGOCD_URL: ${ARGOCD_URL:-}
       ARGOCD_TOKEN: ${ARGOCD_TOKEN:-}
       MCP_CONFIG_PATH: /app/mcp_config.json
+      IAC_DIR: /app/iac
+      WORKFLOWS_DIR: /app/.github/workflows
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+      - ./iac:/app/iac
+      - ./.github/workflows:/app/.github/workflows
       - ./mcp_config.json:/app/mcp_config.json:ro
 
   frontend:
