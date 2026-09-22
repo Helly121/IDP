@@ -149,6 +149,10 @@ docker compose up -d
 
 # Verify container status
 docker compose ps
+
+# Access the platform
+#    Frontend:            http://localhost:5173
+#    Backend (API Docs):  http://localhost:8000/docs
 ```
 
 ### 2. Verify Dockerized Terraform CLI
