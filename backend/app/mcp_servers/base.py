@@ -1,4 +1,4 @@
-﻿"""
+"""
 MCP Server Base Classes and Tool Envelope.
 
 Provides the abstract interface that all MCP tool servers implement,
@@ -22,6 +22,8 @@ class ToolCategory(str, Enum):
     KUBERNETES = "kubernetes"
     ARGOCD = "argocd"
     POLICY = "policy"
+    TERRAFORM = "terraform"
+    CICD = "cicd"
 
 
 @dataclass

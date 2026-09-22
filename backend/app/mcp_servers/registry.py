@@ -1,4 +1,4 @@
-﻿"""
+"""
 Central MCP Tool Registry — Aggregates all MCP servers and provides
 a unified interface for the Agent Orchestrator.
 
@@ -21,6 +21,8 @@ from app.mcp_servers.github_server import GitHubMCPServer
 from app.mcp_servers.kubernetes_server import KubernetesMCPServer
 from app.mcp_servers.argocd_server import ArgoCDMCPServer
 from app.mcp_servers.policy_server import PolicyMCPServer
+from app.mcp_servers.terraform_server import TerraformMCPServer
+from app.mcp_servers.workflow_server import WorkflowMCPServer
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,8 @@ class ToolRegistry:
             ("kubernetes", KubernetesMCPServer),
             ("argocd", ArgoCDMCPServer),
             ("policy", PolicyMCPServer),
+            ("terraform", TerraformMCPServer),
+            ("cicd", WorkflowMCPServer),
         ]
 
         for name, cls in server_classes:

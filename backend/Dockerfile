@@ -3,9 +3,17 @@ FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-# System dependencies
+# Terraform version pin
+ARG TERRAFORM_VERSION=1.9.8
+
+# System dependencies & Terraform CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev && \
+    gcc libpq-dev curl unzip git && \
+    curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o /tmp/terraform.zip && \
+    unzip /tmp/terraform.zip -d /usr/local/bin/ && \
+    rm /tmp/terraform.zip && \
+    chmod +x /usr/local/bin/terraform && \
+    apt-get purge -y --auto-remove unzip && \
     rm -rf /var/lib/apt/lists/*
 
 # Python dependencies

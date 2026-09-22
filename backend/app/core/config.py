@@ -1,4 +1,4 @@
-﻿"""
+"""
 Application configuration loaded from environment variables.
 Uses pydantic-settings for type-safe, validated configuration.
 """
@@ -42,6 +42,10 @@ class Settings(BaseSettings):
 
     # ── MCP Configuration ──────────────────────────────────
     MCP_CONFIG_PATH: str = "../mcp_config.json"
+
+    # ── IaC & CI/CD MCP Paths ──────────────────────────────
+    IAC_DIR: str = "/app/iac"
+    WORKFLOWS_DIR: str = "/app/.github/workflows"
 
     # ── App ──────────────────────────────────────────────
     APP_NAME: str = "Academic IDP"
