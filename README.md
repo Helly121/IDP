@@ -188,6 +188,7 @@ Configure in `.env` (or environment):
 | `IAC_DIR` | Path to Terraform IaC workspace | `/app/iac` |
 | `WORKFLOWS_DIR` | Path to GitHub Actions workflows | `/app/.github/workflows` |
 | `MCP_CONFIG_PATH` | Path to MCP config file | `/app/mcp_config.json` |
+| `GOOGLE_CLIENT_ID` | Google Client ID for OAuth verification | *(required for Google Sign-In)* |
 
 ## API Endpoints
 
@@ -197,6 +198,10 @@ Configure in `.env` (or environment):
 | GET | `/api/v1/approvals/pending` | List HITL pending mutating actions |
 | POST | `/api/v1/approvals/{id}/approve` | Approve and execute a pending AI action |
 | POST | `/api/v1/approvals/{id}/reject` | Reject a pending AI action |
+| POST | `/api/v1/auth/google` | Google ID token exchange |
+| POST | `/api/v1/auth/register` | Email + password sign-up (STUDENT only) |
+| POST | `/api/v1/auth/login` | Email + password sign-in |
+| GET | `/api/v1/auth/me` | Return current authenticated user |
 | POST | `/api/v1/projects/create` | Create a new project from form data |
 | GET | `/api/v1/projects/{id}/status` | Get project deployment status |
 | GET | `/api/v1/health` | Health check |
