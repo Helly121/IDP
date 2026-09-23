@@ -1,4 +1,4 @@
-﻿"""
+"""
 Pydantic v2 schemas for the Agent system — requests, SSE events, and approvals.
 """
 
@@ -20,9 +20,9 @@ class AgentRequest(BaseModel):
         max_length=5000,
         description="The user's natural-language request or question",
     )
-    user_id: str = Field(
-        default="00000000-0000-0000-0000-000000000001",
-        description="UUID of the requesting user",
+    user_id: str | None = Field(
+        default=None,
+        description="UUID of the requesting user (derived from JWT if authenticated)",
     )
     project_id: str | None = Field(
         None,
@@ -80,6 +80,9 @@ class PendingActionResponse(BaseModel):
 
 
 class ApprovalDecision(BaseModel):
-    """Input for approving or rejecting an action."""
-    reviewer_id: str = Field(..., description="UUID of the guide/admin approving or rejecting")
-    reason: str | None = Field(None, description="Optional reason for rejection")
+    """Input for approving or rejecting an action.
+
+    Note: reviewer identity is derived from the request's JWT token on the server.
+    Clients do not supply a reviewer_id — this prevents impersonation.
+    """
+    reason: str | None = Field(None, description="Optional reason for rejection or approval note")
