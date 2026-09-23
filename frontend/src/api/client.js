@@ -46,19 +46,6 @@ const api = {
   getProjectStatus: (projectId) =>
     request(`/api/v1/projects/${projectId}/status`),
 
-  // ── AI (Legacy) ──────────────────────────────────────
-  generateManifest: (data) =>
-    request('/api/v1/ai/manifest-generate', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  analyzeLogs: (data) =>
-    request('/api/v1/ai/log-analyze', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
   // ── Agent (SSE Streaming) ────────────────────────────
   runAgent: (message, context = {}) => {
     const url = `${API_BASE}/api/v1/agent/run`;
