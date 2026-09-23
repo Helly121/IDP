@@ -1,0 +1,435 @@
+﻿/* ======================================================
+   AgentPage - Full-screen AI DevOps Mentor Chat
+   Dark glassmorphism theme matching the existing design
+   ====================================================== */
+
+.agent-page-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px); /* Adjust based on your Layout header */
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.agent-page-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(110, 231, 183, 0.1);
+  background: rgba(110, 231, 183, 0.03);
+  border-radius: 20px 20px 0 0;
+}
+
+.agent-page-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.agent-page-avatar {
+  font-size: 2.2rem;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(110, 231, 183, 0.1);
+  border-radius: 14px;
+  border: 1px solid rgba(110, 231, 183, 0.15);
+}
+
+.agent-page-title h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  letter-spacing: -0.01em;
+}
+
+.agent-status {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background: #6ee7b7;
+  box-shadow: 0 0 8px rgba(110, 231, 183, 0.5);
+}
+
+.status-dot.streaming {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+  animation: pulse-dot 1.2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.agent-page-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-left: 1px solid rgba(110, 231, 183, 0.1);
+  border-right: 1px solid rgba(110, 231, 183, 0.1);
+}
+
+.agent-page-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.agent-page-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agent-page-messages::-webkit-scrollbar-thumb {
+  background: rgba(110, 231, 183, 0.15);
+  border-radius: 4px;
+}
+
+.agent-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.agent-empty-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+}
+
+.agent-empty-state h3 {
+  color: #f1f5f9;
+  margin: 0 0 12px;
+  font-size: 1.6rem;
+}
+
+.agent-empty-state p {
+  color: #94a3b8;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0 0 30px;
+  max-width: 500px;
+}
+
+.quick-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  max-width: 700px;
+}
+
+.quick-prompt-btn {
+  background: rgba(110, 231, 183, 0.06);
+  border: 1px solid rgba(110, 231, 183, 0.12);
+  border-radius: 12px;
+  padding: 14px 20px;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  flex: 1 1 calc(50% - 12px);
+  min-width: 250px;
+}
+
+.quick-prompt-btn:hover {
+  background: rgba(110, 231, 183, 0.12);
+  border-color: rgba(110, 231, 183, 0.3);
+  color: #f1f5f9;
+  transform: translateY(-2px);
+}
+
+.agent-page-input {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border: 1px solid rgba(110, 231, 183, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 0 0 20px 20px;
+}
+
+.agent-page-input input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px 20px;
+  color: #f1f5f9;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.agent-page-input input:focus {
+  border-color: rgba(110, 231, 183, 0.4);
+}
+
+.agent-page-input input::placeholder {
+  color: #64748b;
+}
+
+.agent-page-input input:disabled {
+  opacity: 0.5;
+}
+
+.agent-page-input button {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+  border: 1px solid rgba(110, 231, 183, 0.3);
+  background: rgba(110, 231, 183, 0.1);
+  color: #6ee7b7;
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-page-input button:hover:not(:disabled) {
+  background: rgba(110, 231, 183, 0.2);
+  border-color: rgba(110, 231, 183, 0.6);
+}
+
+.agent-page-input button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Base message bubbles */
+.agent-msg {
+  display: flex;
+  gap: 16px;
+  animation: msg-slide-in 0.3s ease-out;
+  max-width: 85%;
+}
+
+@keyframes msg-slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.agent-msg-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.agent-msg-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-msg-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.agent-msg-body p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+}
+
+/* User Message */
+.agent-msg-user {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+}
+
+.agent-msg-user .agent-msg-body {
+  text-align: right;
+  background: rgba(110, 231, 183, 0.1);
+  border: 1px solid rgba(110, 231, 183, 0.15);
+  border-radius: 18px 18px 4px 18px;
+  padding: 14px 20px;
+}
+
+.agent-msg-user .agent-msg-icon {
+  display: none;
+}
+
+.agent-msg-user .agent-msg-label {
+  justify-content: flex-end;
+  color: #6ee7b7;
+}
+
+/* Thinking */
+.agent-msg-thinking {
+  opacity: 0.8;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.thinking-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6ee7b7;
+  animation: dot-bounce 1.4s infinite;
+}
+
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Tool call */
+.tool-name {
+  display: inline-block;
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.badge-mutating {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fb923c;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.btn-expand {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 6px 0;
+  margin-top: 6px;
+  display: block;
+}
+
+.btn-expand:hover {
+  color: #94a3b8;
+}
+
+.tool-params {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  overflow-x: auto;
+  margin-top: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Tool Result */
+.agent-msg-tool-result.success .agent-msg-label {
+  color: #6ee7b7;
+}
+
+.agent-msg-tool-result.failure .agent-msg-label {
+  color: #fca5a5;
+}
+
+/* Approval required */
+.agent-msg-approval {
+  background: rgba(251, 146, 60, 0.06);
+  border: 1px solid rgba(251, 146, 60, 0.15);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.agent-msg-approval .agent-msg-label {
+  color: #fb923c;
+}
+
+.approval-details {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.approval-id {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-family: monospace;
+}
+
+.approval-hint {
+  font-size: 0.85rem !important;
+  color: #94a3b8 !important;
+  font-style: italic;
+  margin-top: 10px !important;
+}
+
+/* Final Response */
+.agent-msg-final {
+  background: rgba(110, 231, 183, 0.04);
+  border: 1px solid rgba(110, 231, 183, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.agent-msg-final .agent-msg-label {
+  color: #6ee7b7;
+}
+
+.agent-response-text {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
+/* Error */
+.agent-msg-error {
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.agent-msg-error .agent-msg-label {
+  color: #fca5a5;
+}

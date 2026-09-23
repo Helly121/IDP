@@ -45,7 +45,7 @@ def _get_gemini_model():
             logger.info("Registering %d tools with Gemini", len(tool_declarations))
 
             _gemini_model = genai.GenerativeModel(
-                "gemini-2.0-flash",
+                "gemini-3.6-flash",
                 tools=[{"function_declarations": tool_declarations}] if tool_declarations else None,
                 system_instruction=_build_system_prompt(),
             )
@@ -90,7 +90,7 @@ async def run_agent_stream(
     Each yield is a fully-formatted SSE string (event + data + newlines).
     """
     sid = uuid.UUID(session_id) if session_id else uuid.uuid4()
-    uid = uuid.UUID(user_id)
+    uid = uuid.UUID(user_id) if user_id else None
     now = lambda: datetime.now(timezone.utc)
 
     # Yield: thinking

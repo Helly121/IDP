@@ -1,5 +1,5 @@
-/**
- * App — Root component with React Router, AuthProvider, Layout shell, and AgentPanel.
+﻿/**
+ * App â€” Root component with React Router, AuthProvider, Layout shell, and AgentPanel.
  */
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
@@ -10,7 +10,7 @@ import Dashboard from './pages/Dashboard';
 import NewProject from './pages/NewProject';
 import ApprovalsDashboard from './pages/ApprovalsDashboard';
 import LoginPage from './pages/LoginPage';
-import AgentPanel from './components/AgentPanel/AgentPanel';
+import AgentPage from './pages/AgentPage';
 
 export default function App() {
   return (
@@ -43,11 +43,19 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+                      <Route
+              path="/agent"
+              element={
+                <ProtectedRoute>
+                  <AgentPage />
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </Layout>
-        {/* Floating AI Agent Panel — accessible for authenticated users */}
-        <AgentPanel />
+        
       </AuthProvider>
     </BrowserRouter>
   );
 }
+

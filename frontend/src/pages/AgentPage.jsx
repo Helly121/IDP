@@ -1,21 +1,19 @@
 ﻿/**
- * AgentPanel — Live AI DevOps mentor with SSE streaming.
- *
- * Connects to POST /api/v1/agent/run and renders the multi-step
- * reasoning (thinking, tool calls, results, approvals) in real-time.
+ * AgentPage - Live AI DevOps mentor full-page chat interface.
+ * Connects to POST /api/v1/agent/run and renders multi-step reasoning.
  */
 
 import { useState, useRef, useEffect } from 'react';
-import api from '../../api/client';
-import './AgentPanel.css';
+import api from '../api/client';
+import './AgentPage.css';
 
 const EVENT_ICONS = {
-  thinking: '🧠',
-  tool_call: '🔧',
-  tool_result: '📊',
-  approval_required: '⏳',
-  final_response: '✅',
-  error: '❌',
+  thinking: '??',
+  tool_call: '??',
+  tool_result: '??',
+  approval_required: '?',
+  final_response: '?',
+  error: '?',
 };
 
 function AgentMessage({ event }) {
@@ -45,7 +43,7 @@ function AgentMessage({ event }) {
           </span>
           <code className="tool-name">{data.tool_name}</code>
           <button className="btn-expand" onClick={() => setExpanded(!expanded)}>
-            {expanded ? 'Hide params ▲' : 'Show params ▼'}
+            {expanded ? 'Hide params  ' : 'Show params  '}
           </button>
           {expanded && (
             <pre className="tool-params">{JSON.stringify(data.params, null, 2)}</pre>
@@ -61,10 +59,10 @@ function AgentMessage({ event }) {
         <span className="agent-msg-icon">{EVENT_ICONS.tool_result}</span>
         <div className="agent-msg-body">
           <span className="agent-msg-label">
-            {data.tool_name} — {data.success ? 'Success' : 'Failed'}
+            {data.tool_name} - {data.success ? 'Success' : 'Failed'}
           </span>
           <button className="btn-expand" onClick={() => setExpanded(!expanded)}>
-            {expanded ? 'Hide result ▲' : 'Show result ▼'}
+            {expanded ? 'Hide result  ' : 'Show result  '}
           </button>
           {expanded && (
             <pre className="tool-params">{JSON.stringify(data.result, null, 2)}</pre>
@@ -118,8 +116,7 @@ function AgentMessage({ event }) {
   return null;
 }
 
-export default function AgentPanel() {
-  const [isOpen, setIsOpen] = useState(false);
+export default function AgentPage() {
   const [input, setInput] = useState('');
   const [events, setEvents] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -141,7 +138,6 @@ export default function AgentPanel() {
     setInput('');
     setIsStreaming(true);
 
-    // Add user message to history
     setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
     setEvents([]);
 
@@ -186,100 +182,93 @@ export default function AgentPanel() {
   };
 
   const quickPrompts = [
+    'Provision a new Redis cache for the student-portal project',
     'What pods are running in the default namespace?',
-    'Analyze CrashLoopBackOff logs for my-service',
     'Check ArgoCD sync status for idp-backend',
     'Estimate cost for 3 replicas with postgres DB',
   ];
 
   return (
-    <>
-      {/* Floating trigger button */}
-      <button
-        className={`agent-fab ${isOpen ? 'open' : ''}`}
-        onClick={() => {
-          setIsOpen(!isOpen);
-          setTimeout(() => inputRef.current?.focus(), 100);
-        }}
-        title="AI DevOps Mentor"
-      >
-        {isOpen ? '✕' : '🤖'}
-      </button>
-
-      {/* Panel */}
-      <div className={`agent-panel ${isOpen ? 'open' : ''}`}>
-        <div className="agent-panel-header">
-          <div className="agent-panel-title">
-            <span className="agent-avatar">🤖</span>
-            <div>
-              <h3>DevOps AI Agent</h3>
-              <span className="agent-status">
-                {isStreaming ? (
-                  <><span className="status-dot streaming" /> Streaming...</>
-                ) : (
-                  <><span className="status-dot online" /> Online</>
-                )}
-              </span>
-            </div>
+    <div className="agent-page-container fade-in">
+      <div className="agent-page-header">
+        <div className="agent-page-title">
+          <div className="agent-page-avatar"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" stroke="#ffffff" strokeWidth="2.5" />
+            <path d="M16 4C9.37258 4 4 9.37258 4 16C4 22.6274 9.37258 28 16 28C22.6274 28 28 22.6274 28 16C28 12.5 26.5 9 24 6.5C21.5 4 18.5 4 16 4Z" fill="#ffffff" />
+            <circle cx="18.5" cy="14.5" r="9.5" fill="#000000" />
+          </svg></div>
+          <div>
+            <h2>DevOps AI Agent</h2>
+            <span className="agent-status">
+              {isStreaming ? (
+                <><span className="status-dot streaming" /> Streaming...</>
+              ) : (
+                <><span className="status-dot online" /> Online</>
+              )}
+            </span>
           </div>
         </div>
+      </div>
 
-        <div className="agent-panel-messages">
-          {events.length === 0 && chatHistory.length === 0 && (
-            <div className="agent-empty-state">
-              <div className="agent-empty-icon">🤖</div>
-              <h4>AI DevOps Mentor</h4>
-              <p>Ask me to provision infrastructure, debug deployments, or manage your GitOps pipeline.</p>
-              <div className="quick-prompts">
-                {quickPrompts.map((prompt, i) => (
-                  <button
-                    key={i}
-                    className="quick-prompt-btn"
-                    onClick={() => {
-                      setInput(prompt);
-                      inputRef.current?.focus();
-                    }}
-                  >
-                    {prompt}
-                  </button>
-                ))}
+      <div className="agent-page-messages">
+        {events.length === 0 && chatHistory.length === 0 && (
+          <div className="agent-empty-state">
+            <div className="agent-empty-icon"><svg width="64" height="64" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" stroke="#ffffff" strokeWidth="2.5" />
+            <path d="M16 4C9.37258 4 4 9.37258 4 16C4 22.6274 9.37258 28 16 28C22.6274 28 28 22.6274 28 16C28 12.5 26.5 9 24 6.5C21.5 4 18.5 4 16 4Z" fill="#ffffff" />
+            <circle cx="18.5" cy="14.5" r="9.5" fill="#000000" />
+          </svg></div>
+            <h3>DevSecOps AI Mentor</h3>
+            <p>I am your AI agent that can provision infrastructure, write and commit GitHub action pipelines, and debug deployments. How can I help you today?</p>
+            <div className="quick-prompts">
+              {quickPrompts.map((prompt, i) => (
+                <button
+                  key={i}
+                  className="quick-prompt-btn"
+                  onClick={() => {
+                    setInput(prompt);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {chatHistory.map((msg, i) => (
+          msg.role === 'user' && (
+            <div key={`user-${i}`} className="agent-msg agent-msg-user">
+              <span className="agent-msg-icon">??</span>
+              <div className="agent-msg-body">
+                <span className="agent-msg-label">You</span>
+                <p>{msg.content}</p>
               </div>
             </div>
-          )}
+          )
+        ))}
 
-          {chatHistory.map((msg, i) => (
-            msg.role === 'user' && (
-              <div key={`user-${i}`} className="agent-msg agent-msg-user">
-                <span className="agent-msg-icon">👤</span>
-                <div className="agent-msg-body">
-                  <span className="agent-msg-label">You</span>
-                  <p>{msg.content}</p>
-                </div>
-              </div>
-            )
-          ))}
+        {events.map((event, i) => (
+          <AgentMessage key={i} event={event} />
+        ))}
 
-          {events.map((event, i) => (
-            <AgentMessage key={i} event={event} />
-          ))}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        <form className="agent-panel-input" onSubmit={handleSubmit}>
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask the AI agent..."
-            disabled={isStreaming}
-          />
-          <button type="submit" disabled={isStreaming || !input.trim()}>
-            {isStreaming ? '⏳' : '➤'}
-          </button>
-        </form>
+        <div ref={messagesEndRef} />
       </div>
-    </>
+
+      <form className="agent-page-input" onSubmit={handleSubmit}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Message the DevOps AI agent..."
+          disabled={isStreaming}
+        />
+        <button type="submit" disabled={isStreaming || !input.trim()}>
+          {isStreaming ? (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation: "pulse-dot 1.2s infinite"}}><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>) : (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>)}
+        </button>
+      </form>
+    </div>
   );
 }

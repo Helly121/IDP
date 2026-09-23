@@ -1,5 +1,5 @@
-/**
- * Layout — DevHub (Internal Developer Platform)
+﻿/**
+ * Layout â€” DevHub (Internal Developer Platform)
  * Navigation Bar & Shell with Authenticated User State & Role Badges
  */
 
@@ -94,12 +94,18 @@ export default function Layout({ children }) {
             >
               Create Service
             </Link>
+            <Link
+              to="/agent"
+              className={`layout-nav-link ${location.pathname === '/agent' ? 'active' : ''}`}
+            >
+              DevSecOps Mentor
+            </Link>
             {isGuideOrAdmin && (
               <Link
                 to="/approvals"
                 className={`layout-nav-link ${location.pathname === '/approvals' ? 'active' : ''}`}
               >
-                ⏳ Approvals
+                â³ Approvals
               </Link>
             )}
             <a
@@ -163,10 +169,11 @@ export default function Layout({ children }) {
             <span className="footer-desc">Internal Developer Platform powered by Kubernetes & AI</span>
           </div>
           <div className="footer-right">
-            <span className="footer-copy">© 2026 DevHub Platform Engineering</span>
+            <span className="footer-copy">Â© 2026 DevHub Platform Engineering</span>
           </div>
         </div>
       </footer>
     </div>
   );
 }
+
