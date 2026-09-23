@@ -24,12 +24,6 @@ from app.core.config import settings
 from app.core.database import async_session_factory
 from app.mcp_servers.registry import registry
 from app.schemas.agent import AgentEvent, AgentEventType
-from app.schemas.deployment import (
-    ManifestRequest,
-    ManifestResponse,
-    LogAnalyzeRequest,
-    LogAnalyzeResponse,
-)
 from app.services import approval_service
 
 logger = logging.getLogger(__name__)
