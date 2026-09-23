@@ -45,7 +45,7 @@ def _get_gemini_model():
             logger.info("Registering %d tools with Gemini", len(tool_declarations))
 
             _gemini_model = genai.GenerativeModel(
-                "gemini-3.6-flash",
+                "gemini-flash-latest",
                 tools=[{"function_declarations": tool_declarations}] if tool_declarations else None,
                 system_instruction=_build_system_prompt(),
             )
