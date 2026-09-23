@@ -1,4 +1,4 @@
-﻿"""
+"""
 Academic IDP — FastAPI Application Entry Point
 
 Initializes the FastAPI app with:
@@ -10,24 +10,19 @@ Initializes the FastAPI app with:
 """
 
 import logging
-import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.database import init_db, close_db, async_session_factory
+from app.core.database import init_db, close_db
 from app.api.v1.router import api_router
 
 # Ensure models are imported so Base.metadata knows about them
 import app.models  # noqa: F401
-from app.models.user import User, UserRole
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-DEMO_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 @asynccontextmanager
@@ -48,20 +43,6 @@ async def lifespan(app: FastAPI):
             info["tool_count"],
             ", ".join(info["tools"]),
         )
-
-    # Seed demo user if it doesn't exist
-    async with async_session_factory() as session:
-        result = await session.execute(select(User).where(User.id == DEMO_USER_ID))
-        if result.scalar_one_or_none() is None:
-            demo_user = User(
-                id=DEMO_USER_ID,
-                email="demo@academic-idp.dev",
-                role=UserRole.STUDENT,
-                full_name="Demo Student",
-            )
-            session.add(demo_user)
-            await session.commit()
-            logger.info("👤 Demo user seeded (demo@academic-idp.dev)")
 
     yield
     logger.info("🛑 Shutting down...")
