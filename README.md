@@ -1,4 +1,4 @@
-# Academic Internal Developer Platform (IDP)
+﻿# Academic Internal Developer Platform (IDP)
 
 A self-service Internal Developer Platform tailored for academic environments that automates end-to-end cloud infrastructure provisioning.
 
