@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import './AgentPanel.css';
 
@@ -119,13 +120,62 @@ function AgentMessage({ event }) {
 }
 
 export default function AgentPanel() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(null);
   const [input, setInput] = useState('');
   const [events, setEvents] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [chatHistory, setChatHistory] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [projectsError, setProjectsError] = useState('');
+  const [selectionOverride, setSelectionOverride] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const requestedServiceId = searchParams.get('serviceId');
+  const requestedServiceName = searchParams.get('serviceName');
+  const selectionKey = `${requestedServiceId || ''}:${requestedServiceName || ''}`;
+  const requestedProject = projects.find(
+    (project) => project.id === requestedServiceId
+      && (!requestedServiceName || project.service_name === requestedServiceName),
+  );
+  const overrideProjectId = selectionOverride?.key === selectionKey
+    ? selectionOverride.projectId
+    : null;
+  const selectedProjectId = overrideProjectId !== null
+    ? overrideProjectId
+    : requestedProject?.id || '';
+  const selectionNotice = !loadingProjects
+    && !projectsError
+    && requestedServiceId
+    && !requestedProject
+    && overrideProjectId === null
+    ? 'The requested service is not available to your account. All Services is selected.'
+    : '';
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const isPanelOpen = isOpen ?? location.pathname === '/agent';
+
+  useEffect(() => {
+    let active = true;
+    api.listProjects()
+      .then((data) => {
+        if (!Array.isArray(data)) {
+          throw new Error('The services response was invalid.');
+        }
+        if (active) setProjects(data);
+      })
+      .catch((err) => {
+        if (active) setProjectsError(err.message || 'Unable to load services.');
+      })
+      .finally(() => {
+        if (active) setLoadingProjects(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -146,7 +196,16 @@ export default function AgentPanel() {
     setEvents([]);
 
     try {
-      const response = await api.runAgent(userMessage);
+      const response = await api.runAgent(userMessage, {
+        project_id: selectedProjectId || null,
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(error.detail || `Request failed: ${response.status}`);
+      }
+      if (!response.body) {
+        throw new Error('The agent response stream is unavailable.');
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -185,29 +244,35 @@ export default function AgentPanel() {
     }
   };
 
-  const quickPrompts = [
-    'What pods are running in the default namespace?',
-    'Analyze CrashLoopBackOff logs for my-service',
-    'Check ArgoCD sync status for idp-backend',
-    'Estimate cost for 3 replicas with postgres DB',
-  ];
+  const quickPrompts = selectedProject
+    ? [
+      `Generate a CI/CD pipeline for ${selectedProject.service_name}.`,
+      `Check the deployment health of ${selectedProject.service_name} in namespace ${selectedProject.namespace || 'not recorded'}.`,
+      `Review the configuration and monthly cost for ${selectedProject.service_name}.`,
+    ]
+    : [
+      'What pods are running in the default namespace?',
+      'Analyze CrashLoopBackOff logs for my-service',
+      'Check ArgoCD sync status for idp-backend',
+      'Estimate cost for 3 replicas with postgres DB',
+    ];
 
   return (
     <>
       {/* Floating trigger button */}
       <button
-        className={`agent-fab ${isOpen ? 'open' : ''}`}
+        className={`agent-fab ${isPanelOpen ? 'open' : ''}`}
         onClick={() => {
-          setIsOpen(!isOpen);
+          setIsOpen(!isPanelOpen);
           setTimeout(() => inputRef.current?.focus(), 100);
         }}
         title="AI DevOps Mentor"
       >
-        {isOpen ? '✕' : '🤖'}
+        {isPanelOpen ? '✕' : '🤖'}
       </button>
 
       {/* Panel */}
-      <div className={`agent-panel ${isOpen ? 'open' : ''}`}>
+      <div className={`agent-panel ${isPanelOpen ? 'open' : ''}`}>
         <div className="agent-panel-header">
           <div className="agent-panel-title">
             <span className="agent-avatar">🤖</span>
@@ -222,6 +287,34 @@ export default function AgentPanel() {
               </span>
             </div>
           </div>
+          <label className="agent-service-select-label" htmlFor="agent-service-select">
+            Workload context
+            <select
+              id="agent-service-select"
+              className="agent-service-select"
+              value={selectedProjectId}
+              onChange={(event) => {
+                setSelectionOverride({
+                  key: selectionKey,
+                  projectId: event.target.value,
+                });
+              }}
+              disabled={loadingProjects || Boolean(projectsError)}
+            >
+              <option value="">All Services</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.service_name}</option>
+              ))}
+            </select>
+          </label>
+          {projectsError && <p className="agent-service-error" role="alert">{projectsError}</p>}
+          {selectionNotice && <p className="agent-service-notice" role="status">{selectionNotice}</p>}
+          {selectedProject && (
+            <div className="agent-selected-service">
+              <strong>{selectedProject.service_name}</strong>
+              <span>Namespace: {selectedProject.namespace || 'Not recorded'}</span>
+            </div>
+          )}
         </div>
 
         <div className="agent-panel-messages">

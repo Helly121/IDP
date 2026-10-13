@@ -43,7 +43,8 @@ const api = {
       body: JSON.stringify(data),
     }),
 
-  listProjects: () => request('/api/v1/projects'),
+  listProjects: () =>
+    request('/api/v1/projects'),
 
   getProjectStatus: (projectId) =>
     request(`/api/v1/projects/${projectId}/status`),
@@ -74,7 +75,6 @@ const api = {
       headers,
       body: JSON.stringify({
         message,
-        user_id: context.user_id || '00000000-0000-0000-0000-000000000001',
         project_id: context.project_id || null,
         session_id: context.session_id || null,
       }),

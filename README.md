@@ -193,11 +193,12 @@ Configure in `.env` (or environment):
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/agent/run` | Stream agent reasoning & tool calls (SSE) |
+| POST | `/api/v1/agent/run` | Stream agent reasoning & tool calls (SSE); optional `project_id` scopes service context |
 | GET | `/api/v1/approvals/pending` | List HITL pending mutating actions |
 | POST | `/api/v1/approvals/{id}/approve` | Approve and execute a pending AI action |
 | POST | `/api/v1/approvals/{id}/reject` | Reject a pending AI action |
 | POST | `/api/v1/projects/create` | Create a new project from form data |
+| GET | `/api/v1/projects` | List the current user's services and deployment metadata |
 | GET | `/api/v1/projects/{id}/status` | Get project deployment status |
 | GET | `/api/v1/health` | Health check |
 

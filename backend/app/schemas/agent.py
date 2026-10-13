@@ -20,13 +20,9 @@ class AgentRequest(BaseModel):
         max_length=5000,
         description="The user's natural-language request or question",
     )
-    user_id: str = Field(
-        default="00000000-0000-0000-0000-000000000001",
-        description="UUID of the requesting user",
-    )
-    project_id: str | None = Field(
+    project_id: UUID | None = Field(
         None,
-        description="Optional project UUID for context",
+        description="Optional project UUID to scope the agent's workload context",
     )
     session_id: str | None = Field(
         None,

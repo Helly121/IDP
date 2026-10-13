@@ -69,9 +69,9 @@ class ProjectStatusResponse(BaseModel):
 
 class ProjectCatalogResponse(ProjectResponse):
     """Project plus the latest persisted deployment metadata for the services catalog."""
-    status: str = "pending"
-    replicas: int = 1
-    db_type: str = "none"
-    cost_estimate: float = 0.0
+    status: str | None = None
+    replicas: int | None = None
+    db_type: str | None = None
+    cost_estimate: float | None = None
     namespace: str | None = None
     deployment_id: UUID | None = None

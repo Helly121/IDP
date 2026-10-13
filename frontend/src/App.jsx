@@ -15,6 +15,7 @@ export default function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/agent" element={<Dashboard />} />
           <Route path="/new-project" element={<NewProject />} />
           <Route path="/approvals" element={<ApprovalsDashboard />} />
         </Routes>
