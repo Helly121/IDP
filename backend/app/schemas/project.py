@@ -65,3 +65,13 @@ class ProjectStatusResponse(BaseModel):
     cost_estimate: float
     namespace: str | None = None
     error_message: str | None = None
+
+
+class ProjectCatalogResponse(ProjectResponse):
+    """Project plus the latest persisted deployment metadata for the services catalog."""
+    status: str = "pending"
+    replicas: int = 1
+    db_type: str = "none"
+    cost_estimate: float = 0.0
+    namespace: str | None = None
+    deployment_id: UUID | None = None
