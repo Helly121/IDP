@@ -66,3 +66,5 @@ htmlcov/
 .coverage
 coverage.xml
 
+cmds.txt
+implementation_plan_1
