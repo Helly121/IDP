@@ -95,6 +95,16 @@ const FEATURES = [
 export default function Dashboard() {
   const [health, setHealth] = useState(null);
   const [loadingHealth, setLoadingHealth] = useState(true);
+  const [services, setServices] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(true);
+  const [servicesError, setServicesError] = useState('');
+
+  useEffect(() => {
+    api.listProjects()
+      .then((data) => setServices(Array.isArray(data) ? data : []))
+      .catch((err) => setServicesError(err.message || 'Unable to load services'))
+      .finally(() => setLoadingServices(false));
+  }, []);
 
   useEffect(() => {
     api.healthCheck()
