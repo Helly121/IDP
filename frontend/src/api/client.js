@@ -43,6 +43,8 @@ const api = {
       body: JSON.stringify(data),
     }),
 
+  listProjects: () => request('/api/v1/projects'),
+
   getProjectStatus: (projectId) =>
     request(`/api/v1/projects/${projectId}/status`),
 
