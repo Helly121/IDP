@@ -14,6 +14,21 @@ from app.models.user import User, UserRole
 from app.schemas.project import ProjectCreate, ProjectStatusResponse, ProjectResponse
 
 
+async def list_projects(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+) -> list[Project]:
+    """Return a user's projects with their deployment records loaded."""
+    stmt = (
+        select(Project)
+        .options(selectinload(Project.deployments))
+        .where(Project.owner_id == owner_id)
+        .order_by(Project.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
 # ── Cost estimation heuristic (placeholder) ────────────────────
 COST_PER_REPLICA = 2.50  # USD/month
 DB_COSTS = {

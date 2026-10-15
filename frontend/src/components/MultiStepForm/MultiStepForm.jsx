@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../api/client';
 import './MultiStepForm.css';
 
@@ -200,9 +201,20 @@ export default function MultiStepForm() {
                 </div>
               </div>
 
-              <button className="btn btn-pill-submit" onClick={resetForm} style={{ marginTop: '2rem' }}>
-                Provision Another Service
-              </button>
+              <div className="try-success-actions">
+                <Link to="/" className="btn btn-secondary">View in Services Dashboard</Link>
+                {result.project?.id && (
+                  <Link
+                    to={`/agent?serviceId=${encodeURIComponent(result.project.id)}&serviceName=${encodeURIComponent(result.project.service_name || formData.service_name)}`}
+                    className="btn btn-primary"
+                  >
+                    Open in DevSecOps Mentor
+                  </Link>
+                )}
+                <button className="btn btn-pill-submit" onClick={resetForm}>
+                  Provision Another Service
+                </button>
+              </div>
             </div>
           ) : (
             /* Main Form */

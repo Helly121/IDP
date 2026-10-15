@@ -95,6 +95,24 @@ const FEATURES = [
 export default function Dashboard() {
   const [health, setHealth] = useState(null);
   const [loadingHealth, setLoadingHealth] = useState(true);
+  const [projects, setProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [projectsError, setProjectsError] = useState('');
+
+  const loadProjects = async () => {
+    try {
+      const data = await api.listProjects();
+      if (!Array.isArray(data)) {
+        throw new Error('The services response was invalid.');
+      }
+      setProjects(data);
+      setProjectsError('');
+    } catch (err) {
+      setProjectsError(err.message || 'Unable to load services.');
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
 
   useEffect(() => {
     api.healthCheck()
@@ -107,6 +125,35 @@ export default function Dashboard() {
         setLoadingHealth(false);
       });
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    api.listProjects()
+      .then((data) => {
+        if (!Array.isArray(data)) {
+          throw new Error('The services response was invalid.');
+        }
+        if (active) {
+          setProjects(data);
+          setProjectsError('');
+        }
+      })
+      .catch((err) => {
+        if (active) setProjectsError(err.message || 'Unable to load services.');
+      })
+      .finally(() => {
+        if (active) setLoadingProjects(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const retryProjects = () => {
+    setLoadingProjects(true);
+    setProjectsError('');
+    loadProjects();
+  };
 
   return (
     <div className="dash-root">
@@ -148,6 +195,79 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="container services-section" aria-labelledby="services-title">
+        <div className="services-section-header">
+          <div>
+            <span className="section-kicker">SERVICE CATALOG</span>
+            <h2 className="section-title" id="services-title">Your Services &amp; Deployments</h2>
+          </div>
+          {!loadingProjects && !projectsError && projects.length > 0 && (
+            <Link to="/new-project" className="btn btn-secondary">Create Service</Link>
+          )}
+        </div>
+
+        {loadingProjects ? (
+          <div className="services-state" role="status">Loading your services...</div>
+        ) : projectsError ? (
+          <div className="services-state services-state-error" role="alert">
+            <p>{projectsError}</p>
+            <button className="btn btn-secondary" onClick={retryProjects}>Try Again</button>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="services-state services-empty-state">
+            <h3>No services yet</h3>
+            <p>Create your first service to see its deployment configuration here.</p>
+            <Link to="/new-project" className="btn btn-primary">Create Your First Service</Link>
+          </div>
+        ) : (
+          <div className="services-grid">
+            {projects.map((project) => (
+              <article className="service-card" key={project.id}>
+                <div className="service-card-heading">
+                  <div>
+                    <h3>{project.service_name}</h3>
+                    <p className="service-namespace">
+                      Namespace: {project.namespace || 'Not recorded'}
+                    </p>
+                  </div>
+                  <span className={`service-status service-status-${project.status || 'unknown'}`}>
+                    {project.status || 'Unknown'}
+                  </span>
+                </div>
+
+                <div className="service-badges" aria-label="Service configuration">
+                  <span className="service-badge">{project.language || 'Language not recorded'}</span>
+                  <span className="service-badge">{project.framework || 'Framework not recorded'}</span>
+                  <span className="service-badge">{project.db_type || 'Database not recorded'}</span>
+                </div>
+
+                <div className="service-metrics">
+                  <div>
+                    <span className="service-metric-label">Replicas</span>
+                    <strong>{project.replicas ?? 'Not recorded'}</strong>
+                  </div>
+                  <div>
+                    <span className="service-metric-label">Monthly cost</span>
+                    <strong>
+                      {project.cost_estimate == null
+                        ? 'Not recorded'
+                        : `$${Number(project.cost_estimate).toFixed(2)} / mo`}
+                    </strong>
+                  </div>
+                </div>
+
+                <Link
+                  className="service-mentor-link"
+                  to={`/agent?serviceId=${encodeURIComponent(project.id)}&serviceName=${encodeURIComponent(project.service_name)}`}
+                >
+                  Manage with AI Mentor
+                </Link>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ── SECTION 2: "What is DevHub" (Screenshot 3 Style) ───── */}

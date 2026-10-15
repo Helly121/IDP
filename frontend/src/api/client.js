@@ -80,6 +80,9 @@ const api = {
       body: JSON.stringify(data),
     }),
 
+  listProjects: () =>
+    request('/api/v1/projects'),
+
   getProjectStatus: (projectId) =>
     request(`/api/v1/projects/${projectId}/status`),
 
@@ -105,11 +108,11 @@ const api = {
       method: 'POST',
       headers,
       body: JSON.stringify({
+        
         message,
         user_id: resolvedUserId,
         project_id: context.project_id || null,
-        session_id: context.session_id || null,
-      }),
+
     });
   },
 
