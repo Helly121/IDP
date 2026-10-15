@@ -30,6 +30,7 @@ services:
       CORS_ORIGINS: '["http://localhost:5173"]'
       JWT_SECRET_KEY: dev-secret-key-change-in-production
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITHUB_ORG: ${GITHUB_ORG:-academic-idp}
       KUBECONFIG: ${KUBECONFIG:-}
@@ -59,6 +60,7 @@ services:
       - "5173:5173"
     environment:
       VITE_API_BASE_URL: http://localhost:8000
+      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-${GOOGLE_CLIENT_ID:-}}
     depends_on:
       - backend
     volumes:

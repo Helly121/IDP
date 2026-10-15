@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ApprovalsDashboard — Admin/Guide view for managing pending HITL approval requests.
  *
  * Displays a table of pending mutating tool calls with approve/reject actions.
@@ -13,8 +13,6 @@ const STATUS_BADGES = {
   approved: { className: 'badge-success', label: 'Approved' },
   rejected: { className: 'badge-error', label: 'Rejected' },
 };
-
-const DEMO_REVIEWER_ID = '00000000-0000-0000-0000-000000000001';
 
 export default function ApprovalsDashboard() {
   const [actions, setActions] = useState([]);
@@ -39,7 +37,6 @@ export default function ApprovalsDashboard() {
   }, [tab]);
 
   useEffect(() => {
-    setLoading(true);
     fetchActions();
     const interval = setInterval(fetchActions, 10000);
     return () => clearInterval(interval);
@@ -48,7 +45,7 @@ export default function ApprovalsDashboard() {
   const handleApprove = async (actionId) => {
     setProcessing(actionId);
     try {
-      await api.approveAction(actionId, DEMO_REVIEWER_ID);
+      await api.approveAction(actionId);
       await fetchActions();
     } catch (err) {
       setError(err.message);
@@ -61,7 +58,7 @@ export default function ApprovalsDashboard() {
     const reason = prompt('Reason for rejection (optional):');
     setProcessing(actionId);
     try {
-      await api.rejectAction(actionId, DEMO_REVIEWER_ID, reason || undefined);
+      await api.rejectAction(actionId, reason || undefined);
       await fetchActions();
     } catch (err) {
       setError(err.message);

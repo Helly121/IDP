@@ -197,6 +197,114 @@
   color: #ffffff;
 }
 
+/* ── User Auth Menu & Badges ───────────────────────────────────── */
+.user-profile-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.user-info-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  padding: 0.3rem 0.75rem 0.3rem 0.35rem;
+}
+
+.user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #1ed760;
+  color: #000000;
+  font-weight: 700;
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.user-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #f4f4f5;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-role-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+}
+
+.user-role-tag.role-student {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.user-role-tag.role-guide {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.user-role-tag.role-admin {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.btn-signout {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #a1a1aa;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-signout:hover {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.btn-signin-nav {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 1rem;
+  background: #1ed760;
+  color: #000000;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.btn-signin-nav:hover {
+  background: #22e367;
+  transform: translateY(-1px);
+}
+
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .layout-header-inner { height: 64px; }
@@ -205,4 +313,5 @@
   .layout-nav-link { font-size: 0.8rem; }
   .layout-account-pill { padding: 0.35rem 0.75rem; font-size: 0.75rem; }
   .layout-footer-inner { flex-direction: column; gap: 0.5rem; text-align: center; }
+  .user-name { display: none; }
 }

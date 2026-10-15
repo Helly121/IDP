@@ -134,9 +134,11 @@ class TerraformMCPServer(MCPServerBase):
     # MCPServerBase interface
     # ------------------------------------------------------------------
 
+    
+
     def is_available(self) -> bool:
-        """Check if terraform binary is available on PATH or in /usr/local/bin."""
-        return bool(shutil.which("terraform") or os.path.exists("/usr/local/bin/terraform"))
+        """Always register Terraform tools; CLI operations check availability when invoked."""
+        return True
 
     def list_tools(self) -> list[ToolDefinition]:
         return [

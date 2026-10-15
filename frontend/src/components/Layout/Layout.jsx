@@ -1,15 +1,18 @@
-﻿/**
- * Layout — DevHub (Internal Developer Platform)
- * Exact Spotify for Backstage Navigation Bar & Shell
+/**
+ * Layout - DevHub (Internal Developer Platform)
+ * Navigation Bar & Shell with Authenticated User State & Role Badges
  */
 
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../api/client';
 import './Layout.css';
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [isConnected, setIsConnected] = useState(true);
 
   useEffect(() => {
@@ -32,9 +35,16 @@ export default function Layout({ children }) {
     };
   }, []);
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const isGuideOrAdmin = user && (user.role === 'guide' || user.role === 'admin');
+
   return (
     <div className="layout">
-      {/* Top Banner Notice (as seen in Spotify Portal) */}
+      {/* Top Banner Notice */}
       <div className="layout-top-banner">
         <div className="container layout-banner-content">
           <span>See DevHub in action with live cluster telemetry.</span>
@@ -52,7 +62,7 @@ export default function Layout({ children }) {
       {/* Main Navbar */}
       <header className="layout-header">
         <div className="layout-header-inner container">
-          {/* Exact Brand Logo from Spotify Backstage */}
+          {/* Brand Logo */}
           <Link to="/" className="layout-brand">
             <div className="layout-eclipse-logo">
               <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -85,11 +95,19 @@ export default function Layout({ children }) {
               Create Service
             </Link>
             <Link
-              to="/approvals"
-              className={`layout-nav-link ${location.pathname === '/approvals' ? 'active' : ''}`}
+              to="/agent"
+              className={`layout-nav-link ${location.pathname === '/agent' ? 'active' : ''}`}
             >
-              ⏳ Approvals
+              DevSecOps Mentor
             </Link>
+            {isGuideOrAdmin && (
+              <Link
+                to="/approvals"
+                className={`layout-nav-link ${location.pathname === '/approvals' ? 'active' : ''}`}
+              >
+                Approvals
+              </Link>
+            )}
             <a
               href="http://localhost:8000/docs"
               target="_blank"
@@ -100,12 +118,40 @@ export default function Layout({ children }) {
             </a>
           </nav>
 
-          {/* Right Action / Status Pill */}
+          {/* Right Actions / User Status */}
           <div className="layout-actions">
-            <div className={`layout-account-pill ${isConnected ? 'live' : 'offline'}`}>
+            <div className={`layout-account-pill ${isConnected ? 'live' : 'offline'}`} title="Backend cluster connectivity">
               <span className="account-dot"></span>
               <span className="account-text">{isConnected ? 'System Live' : 'Offline'}</span>
             </div>
+
+            {user ? (
+              <div className="user-profile-menu">
+                <div className="user-info-badge">
+                  <span className="user-avatar">
+                    {(user.full_name || user.email || 'U')[0].toUpperCase()}
+                  </span>
+                  <div className="user-meta">
+                    <span className="user-name">{user.full_name || user.email.split('@')[0]}</span>
+                    <span className={`user-role-tag role-${user.role}`}>
+                      {user.role.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-signout"
+                  onClick={handleLogout}
+                  title="Sign out of DevHub"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <Link to="/login" className="btn-signin-nav">
+                Sign In
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -123,10 +169,11 @@ export default function Layout({ children }) {
             <span className="footer-desc">Internal Developer Platform powered by Kubernetes & AI</span>
           </div>
           <div className="footer-right">
-            <span className="footer-copy">© 2026 DevHub Platform Engineering</span>
+            <span className="footer-copy">&copy; 2026 DevHub Platform Engineering</span>
           </div>
         </div>
       </footer>
     </div>
   );
 }
+
