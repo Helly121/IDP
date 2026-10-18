@@ -3,9 +3,16 @@
  * Exact Spotify Portal Hero, Portal Ring, and Curved Horizon Sections
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
+import {
+  HOURS_SAVED_PER_ACTIVE_SERVICE,
+  calculateTotalHoursSaved,
+  countActiveServices,
+  PLATFORM_BENCHMARKS,
+  DORA_BENCHMARKS,
+} from '../utils/benchmarkMetrics';
 import './Dashboard.css';
 
 const STATS = [
@@ -98,6 +105,9 @@ export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [projectsError, setProjectsError] = useState('');
+
+  const activeServicesCount = useMemo(() => countActiveServices(projects), [projects]);
+  const estimatedHoursSaved = useMemo(() => calculateTotalHoursSaved(activeServicesCount), [activeServicesCount]);
 
   const loadProjects = async () => {
     try {
@@ -268,6 +278,204 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* ── SECTION: Platform Impact & DORA Metrics ────────────── */}
+      <section className="container impact-section" aria-labelledby="platform-impact-title">
+        <div className="impact-section-header">
+          <div>
+            <span className="section-kicker">BENCHMARK IMPACT &amp; DORA METRICS</span>
+            <h2 className="section-title" id="platform-impact-title">Platform Impact &amp; Delivery Benchmarks</h2>
+            <p className="impact-subtitle">
+              Quantitative comparison of DevHub automated self-service golden paths versus traditional manual cloud infrastructure delivery.
+            </p>
+          </div>
+          <div className="impact-badge-container">
+            <span className="impact-disclaimer-badge">
+              *Benchmark Estimates • Not Measured Telemetry
+            </span>
+          </div>
+        </div>
+
+        {/* ── Highlight Summary Stats ── */}
+        <div className="impact-summary-grid">
+          {/* Stat 1: Active Services */}
+          <div className="impact-stat-card">
+            <div className="impact-stat-top">
+              <span className="impact-stat-label">Active Workloads</span>
+              <span className="impact-pill">LIVE</span>
+            </div>
+            <div className="impact-stat-val">
+              {loadingProjects ? '...' : activeServicesCount}
+            </div>
+            <div className="impact-stat-sub">
+              {loadingProjects ? 'Counting services...' : `${projects.length} Total Services in Catalog`}
+            </div>
+          </div>
+
+          {/* Stat 2: Engineering Hours Saved (active services × 1.25 hours) */}
+          <div className="impact-stat-card impact-stat-featured">
+            <div className="impact-stat-top">
+              <span className="impact-stat-label">Engineering Hours Saved</span>
+              <span className="impact-pill impact-pill-accent">ESTIMATE</span>
+            </div>
+            <div className="impact-stat-val impact-val-accent">
+              {loadingProjects ? '...' : `${estimatedHoursSaved} hrs`}
+            </div>
+            <div className="impact-stat-sub">
+              {activeServicesCount === 0 && !loadingProjects
+                ? 'Formula: active services × 1.25 hrs (0 active workloads)'
+                : `${activeServicesCount} active × ${HOURS_SAVED_PER_ACTIVE_SERVICE} hrs saved/service`}
+            </div>
+          </div>
+
+          {/* Stat 3: Boilerplate Automated */}
+          <div className="impact-stat-card">
+            <div className="impact-stat-top">
+              <span className="impact-stat-label">IaC Boilerplate Avoided</span>
+              <span className="impact-pill">ESTIMATE</span>
+            </div>
+            <div className="impact-stat-val">
+              {loadingProjects
+                ? '...'
+                : activeServicesCount > 0
+                ? `~${(activeServicesCount * 450).toLocaleString()} lines`
+                : '0 lines'}
+            </div>
+            <div className="impact-stat-sub">
+              ~450 lines of K8s/IaC scaffolding per workload
+            </div>
+          </div>
+
+          {/* Stat 4: Configuration Failure Rate */}
+          <div className="impact-stat-card">
+            <div className="impact-stat-top">
+              <span className="impact-stat-label">Config Failure Rate</span>
+              <span className="impact-pill impact-pill-dora">DORA ELITE</span>
+            </div>
+            <div className="impact-stat-val impact-val-accent">
+              &lt; 2%
+            </div>
+            <div className="impact-stat-sub">
+              vs ~28% in ad-hoc manual provisioning
+            </div>
+          </div>
+        </div>
+
+        {/* Empty / Initial State Advisory Banner */}
+        {!loadingProjects && activeServicesCount === 0 && (
+          <div className="impact-empty-banner">
+            <div className="impact-empty-info">
+              <h4>Ready to quantify your engineering time savings?</h4>
+              <p>
+                Each service provisioned through DevHub saves an estimated <strong>1.25 engineering hours</strong> by automating Kubernetes manifests, namespace isolation, and GitOps pipelines.
+              </p>
+            </div>
+            <Link to="/new-project" className="btn btn-secondary">Provision First Service</Link>
+          </div>
+        )}
+
+        {/* ── 4 Visual Comparisons: Manual vs. DevHub ── */}
+        <div className="impact-benchmarks-grid">
+          {PLATFORM_BENCHMARKS.map((benchmark) => (
+            <div className="impact-benchmark-card" key={benchmark.id}>
+              <div className="benchmark-card-header">
+                <span className="benchmark-category-tag">{benchmark.category}</span>
+                <span className="benchmark-improvement-badge">{benchmark.improvement}</span>
+              </div>
+              <h3 className="benchmark-card-title">{benchmark.title}</h3>
+
+              <div className="benchmark-comparison-cols">
+                {/* Manual Column */}
+                <div className="benchmark-col benchmark-col-manual">
+                  <span className="col-type-tag">MANUAL WORKFLOW</span>
+                  <div className="col-val-display">{benchmark.manual.value}</div>
+                  <div className="col-label">{benchmark.manual.label}</div>
+                  <p className="col-detail">{benchmark.manual.detail}</p>
+                </div>
+
+                <div className="benchmark-vs-divider">
+                  <span>vs</span>
+                </div>
+
+                {/* DevHub Column */}
+                <div className="benchmark-col benchmark-col-devhub">
+                  <span className="col-type-tag col-type-tag-devhub">DEVHUB PLATFORM</span>
+                  <div className="col-val-display col-val-devhub">{benchmark.devhub.value}</div>
+                  <div className="col-label col-label-devhub">{benchmark.devhub.label}</div>
+                  <p className="col-detail">{benchmark.devhub.detail}</p>
+                </div>
+              </div>
+
+              {/* Visual meter bar */}
+              <div className="benchmark-meter-wrap">
+                <div className="benchmark-meter-labels">
+                  <span>DevHub Efficiency Gain</span>
+                  <span className="meter-pct-text">{benchmark.pctReduction}% Improvement</span>
+                </div>
+                <div className="benchmark-meter-track">
+                  <div
+                    className="benchmark-meter-fill"
+                    style={{ width: `${benchmark.pctReduction}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="benchmark-card-footer">
+                <span className="savings-highlight">⚡ {benchmark.savingsPerService}</span>
+                <span className="benchmark-disclaimer-text">*Standardized benchmark estimate</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── DORA 4 Metrics Capability Matrix ── */}
+        <div className="dora-matrix-card">
+          <div className="dora-matrix-header">
+            <div>
+              <span className="dora-matrix-kicker">DORA PERFORMANCE BENCHMARKS</span>
+              <h3 className="dora-matrix-title">DevOps Research &amp; Assessment (DORA) Benchmarks</h3>
+              <p className="dora-matrix-desc">
+                Comparison of DevHub platform delivery maturity against industry software delivery performance standards.
+              </p>
+            </div>
+            <span className="badge badge-success">
+              <span className="badge-dot"></span> Elite Industry Tier
+            </span>
+          </div>
+
+          <div className="dora-table-wrap">
+            <div className="dora-grid">
+              {DORA_BENCHMARKS.map((dora) => (
+                <div className="dora-item" key={dora.id}>
+                  <div className="dora-item-top">
+                    <span className="dora-metric-name">{dora.name}</span>
+                    <span className="dora-tier-pill">{dora.statusBadge}</span>
+                  </div>
+                  <div className="dora-item-body">
+                    <div className="dora-manual-row">
+                      <span className="dora-label">Manual:</span>
+                      <span className="dora-val-manual">{dora.manual}</span>
+                    </div>
+                    <div className="dora-devhub-row">
+                      <span className="dora-label">DevHub:</span>
+                      <span className="dora-val-devhub">{dora.devhub}</span>
+                    </div>
+                  </div>
+                  <div className="dora-item-footer">
+                    <span>✨ {dora.benefit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="dora-footnote">
+            <p>
+              *Disclaimer: All benchmark values and DORA metrics shown are standardized platform engineering models and estimates (including the 1.25 hours saved per active service heuristic), not measured production telemetry.
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* ── SECTION 2: "What is DevHub" (Screenshot 3 Style) ───── */}
