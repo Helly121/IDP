@@ -273,6 +273,284 @@
   color: #1ed760 !important;
 }
 
+/* ── Live Effort Benchmark Card (In Form) ───────────────────────── */
+.try-benchmark-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.15rem 1.25rem;
+  background: rgba(18, 20, 29, 0.75);
+  border: 1px solid rgba(110, 231, 183, 0.22);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  margin-top: 0.25rem;
+  transition: all var(--transition-base);
+}
+
+.try-benchmark-card:hover {
+  border-color: rgba(110, 231, 183, 0.4);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.6), 0 0 16px rgba(110, 231, 183, 0.1);
+}
+
+.try-benchmark-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.try-benchmark-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.try-benchmark-badge {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #6ee7b7;
+  background: rgba(110, 231, 183, 0.12);
+  border: 1px solid rgba(110, 231, 183, 0.3);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+}
+
+.try-benchmark-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.try-benchmark-estimate-pill {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.try-benchmark-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.try-bench-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.65rem 0.8rem;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+.try-bench-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.try-bench-comparison {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.bench-manual {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.bench-arrow {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-family: var(--font-mono);
+}
+
+.bench-devhub {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #6ee7b7;
+}
+
+.try-bench-sub {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.try-benchmark-meter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.meter-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #6ee7b7 100%);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 8px rgba(110, 231, 183, 0.5);
+  transition: width 0.3s ease;
+}
+
+.meter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.meter-text {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #6ee7b7;
+}
+
+.meter-disclaimer {
+  font-size: 0.66rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* ── Lifecycle Distinction (Success View) ────────────────────────── */
+.try-lifecycle-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 1.25rem;
+}
+
+.lifecycle-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.chip-success {
+  background: rgba(30, 215, 96, 0.08);
+  border: 1px solid rgba(30, 215, 96, 0.25);
+}
+
+.chip-pending {
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+
+.chip-indicator {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.chip-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.chip-text strong {
+  font-size: 0.78rem;
+  color: #ffffff;
+}
+
+.chip-text span {
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+/* ── Workload Impact Benchmark Card (Success View) ────────────────── */
+.try-success-impact-card {
+  width: 100%;
+  padding: 1.15rem 1.25rem;
+  background: radial-gradient(circle at top right, rgba(110, 231, 183, 0.08) 0%, rgba(18, 20, 29, 0.85) 70%);
+  border: 1px solid rgba(110, 231, 183, 0.3);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.impact-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.impact-card-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #6ee7b7;
+}
+
+.impact-card-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #6ee7b7;
+  background: rgba(110, 231, 183, 0.12);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+}
+
+.impact-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.impact-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.25rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+}
+
+.impact-stat-number {
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.impact-stat-desc {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.impact-card-disclaimer {
+  font-size: 0.68rem;
+  color: #64748b;
+  line-height: 1.4;
+  font-style: italic;
+  text-align: center;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .try-portal-box {
