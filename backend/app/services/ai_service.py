@@ -1,4 +1,4 @@
-﻿"""
+"""
 AI Agent Orchestrator â€” Gemini-powered agentic loop with MCP tool calling.
 
 Replaces the previous static prompt-wrapper with an autonomous agent that:
@@ -83,6 +83,7 @@ async def run_agent_stream(
     user_id: str,
     project_id: str | None = None,
     session_id: str | None = None,
+    model: Any = None,
 ) -> AsyncGenerator[str, None]:
     """
     Main entry point: run the agentic loop and yield SSE events.
@@ -100,7 +101,8 @@ async def run_agent_stream(
         timestamp=now(),
     ).to_sse()
 
-    model = _get_gemini_model()
+    if model is None:
+        model = _get_gemini_model()
     if model is None:
         yield AgentEvent(
             type=AgentEventType.ERROR,
@@ -124,8 +126,41 @@ async def run_agent_stream(
         max_iterations = 10
         iteration = 0
 
+        # Token usage tracking
+        total_prompt_tokens = 0
+        total_candidates_tokens = 0
+        total_model_tokens = 0
+        call_count = 0
+        call_usages: list[dict[str, Any]] = []
+
         while iteration < max_iterations:
             iteration += 1
+
+            # Extract usage metadata from response
+            usage_meta = getattr(response, "usage_metadata", None)
+            prompt_tokens = getattr(usage_meta, "prompt_token_count", 0) if usage_meta else 0
+            candidates_tokens = getattr(usage_meta, "candidates_token_count", 0) if usage_meta else 0
+            total_tokens = getattr(usage_meta, "total_token_count", prompt_tokens + candidates_tokens) if usage_meta else (prompt_tokens + candidates_tokens)
+
+            call_count += 1
+            total_prompt_tokens += prompt_tokens
+            total_candidates_tokens += candidates_tokens
+            total_model_tokens += total_tokens
+            call_usages.append({
+                "call_index": call_count,
+                "iteration": iteration,
+                "prompt_tokens": prompt_tokens,
+                "candidates_tokens": candidates_tokens,
+                "total_tokens": total_tokens,
+            })
+
+            logger.info(
+                "Agent iteration %d token usage: prompt=%d, candidates=%d, total=%d",
+                iteration,
+                prompt_tokens,
+                candidates_tokens,
+                total_tokens,
+            )
 
             # Check if the response contains function calls
             candidate = response.candidates[0] if response.candidates else None
@@ -148,7 +183,17 @@ async def run_agent_stream(
                 final_text = "\n".join(text_parts) if text_parts else "I've completed the analysis."
                 yield AgentEvent(
                     type=AgentEventType.FINAL_RESPONSE,
-                    data={"message": final_text},
+                    data={
+                        "message": final_text,
+                        "usage": {
+                            "prompt_tokens": total_prompt_tokens,
+                            "candidates_tokens": total_candidates_tokens,
+                            "total_tokens": total_model_tokens,
+                            "api_calls": call_count,
+                            "iterations": iteration,
+                            "calls": call_usages,
+                        },
+                    },
                     timestamp=now(),
                 ).to_sse()
                 return
@@ -246,7 +291,17 @@ async def run_agent_stream(
         # If we hit max iterations, yield a warning
         yield AgentEvent(
             type=AgentEventType.FINAL_RESPONSE,
-            data={"message": "I've reached the maximum number of reasoning steps. Here's what I've found so far."},
+            data={
+                "message": "I've reached the maximum number of reasoning steps. Here's what I've found so far.",
+                "usage": {
+                    "prompt_tokens": total_prompt_tokens,
+                    "candidates_tokens": total_candidates_tokens,
+                    "total_tokens": total_model_tokens,
+                    "api_calls": call_count,
+                    "iterations": iteration,
+                    "calls": call_usages,
+                },
+            },
             timestamp=now(),
         ).to_sse()
 
