@@ -33,6 +33,10 @@ _CATEGORY_PATTERNS: dict[ToolCategory, list[str]] = {
         r"\bmain\.tf\b",
         r"\bvariables?\.tf\b",
         r"\boutputs?\.tf\b",
+        r"\bpatch\b",
+        r"\btemplates?\b",
+        r"\btpl\b",
+        r"\brender\b",
     ],
     ToolCategory.CICD: [
         r"\bpipeline\b",
@@ -47,6 +51,7 @@ _CATEGORY_PATTERNS: dict[ToolCategory, list[str]] = {
         r"\bci\.ya?ml\b",
         r"\bdeploy\.ya?ml\b",
         r"\bbuild\b",
+        r"\bpatch\b",
     ],
     ToolCategory.GITHUB: [
         r"\bgithub\b",

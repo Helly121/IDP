@@ -46,9 +46,14 @@ async def test_workflow_server_tool_definitions(temp_workflow_workspace):
     write_tool = next(t for t in tools if t.name == "workflow_write")
     assert write_tool.is_mutating is True
     assert write_tool.category == ToolCategory.CICD
-    
+
+    patch_tool = next((t for t in tools if t.name == "workflow_patch"), None)
+    if patch_tool:
+        assert patch_tool.is_mutating is True
+        assert patch_tool.category == ToolCategory.CICD
+
     for t in tools:
-        if t.name != "workflow_write":
+        if t.name not in ("workflow_write", "workflow_patch"):
             assert t.is_mutating is False, f"Tool {t.name} should not be mutating"
 
 

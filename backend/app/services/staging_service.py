@@ -231,3 +231,145 @@ def stage_workflow_file(
 
     logger.info("Staged workflow file '%s' in session %s", workflow_name, session_id)
     return target
+
+
+def stage_terraform_patch(
+    session_id: str | uuid.UUID,
+    file_path: str,
+    old_string: str,
+    new_string: str,
+    real_iac_root: Path | None = None,
+) -> Path:
+    """
+    Apply a proposed patch to a Terraform file in the session's staging workspace.
+    Initializes the staging tree if needed, ensures old_string exists exactly once,
+    and applies the replacement.
+    """
+    session_dir = get_session_dir(session_id)
+    staged_iac = session_dir / "iac"
+
+    if not staged_iac.exists():
+        session_dir.mkdir(parents=True, exist_ok=True)
+        if real_iac_root and real_iac_root.exists() and real_iac_root.is_dir():
+            def _ignore_tf(path: str, names: list[str]) -> set[str]:
+                ignored = set()
+                for name in names:
+                    if name == ".terraform" or name.endswith(".tfstate") or name.endswith(".tfstate.backup"):
+                        ignored.add(name)
+                return ignored
+
+            shutil.copytree(real_iac_root, staged_iac, ignore=_ignore_tf)
+            logger.info("Cloned base iac tree into staging workspace for session %s", session_id)
+        else:
+            staged_iac.mkdir(parents=True, exist_ok=True)
+
+    clean_rel = file_path.strip().lstrip("/\\")
+    target = (staged_iac / clean_rel).resolve()
+    try:
+        target.relative_to(staged_iac.resolve())
+    except ValueError:
+        raise PermissionError(
+            f"Access denied: Path '{file_path}' escapes staging workspace '{staged_iac}'"
+        )
+
+    if not target.exists() or not target.is_file():
+        # Fallback check against real root if cloned tree didn't contain it
+        if real_iac_root and (real_iac_root / clean_rel).is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(real_iac_root / clean_rel, target)
+        else:
+            raise FileNotFoundError(f"Terraform file not found to patch: '{file_path}'")
+
+    content = target.read_text(encoding="utf-8")
+    count = content.count(old_string)
+    if count == 0:
+        raise ValueError(f"Patch failed: old_string not found in '{file_path}'")
+    if count > 1:
+        raise ValueError(
+            f"Patch failed: old_string occurs {count} times in '{file_path}'; must occur exactly once"
+        )
+
+    patched = content.replace(old_string, new_string, 1)
+    target.write_text(patched, encoding="utf-8")
+
+    try:
+        os.utime(session_dir, None)
+    except OSError:
+        pass
+
+    logger.info("Staged Terraform patch on '%s' in session %s", file_path, session_id)
+    return target
+
+
+def stage_workflow_patch(
+    session_id: str | uuid.UUID,
+    workflow_name: str,
+    old_string: str,
+    new_string: str,
+    real_workflows_root: Path | None = None,
+) -> Path:
+    """
+    Apply a proposed patch to a workflow file in the session's staging workspace.
+    Fails if old_string is not found exactly once or if the result is invalid YAML.
+    """
+    import yaml
+
+    session_dir = get_session_dir(session_id)
+    staged_wf = session_dir / ".github" / "workflows"
+
+    if not staged_wf.exists():
+        session_dir.mkdir(parents=True, exist_ok=True)
+        if real_workflows_root and real_workflows_root.exists() and real_workflows_root.is_dir():
+            shutil.copytree(real_workflows_root, staged_wf)
+            logger.info("Cloned base workflows into staging workspace for session %s", session_id)
+        else:
+            staged_wf.mkdir(parents=True, exist_ok=True)
+
+    clean_name = workflow_name.strip().lstrip("/\\")
+    if "/" in clean_name or "\\" in clean_name or ".." in clean_name:
+        raise PermissionError(f"Access denied: Invalid workflow file name '{workflow_name}'")
+
+    if not (clean_name.endswith(".yml") or clean_name.endswith(".yaml")):
+        clean_name += ".yml"
+
+    target = (staged_wf / clean_name).resolve()
+    try:
+        target.relative_to(staged_wf.resolve())
+    except ValueError:
+        raise PermissionError(
+            f"Access denied: Path '{workflow_name}' escapes staging workspace '{staged_wf}'"
+        )
+
+    if not target.exists() or not target.is_file():
+        if real_workflows_root and (real_workflows_root / clean_name).is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(real_workflows_root / clean_name, target)
+        else:
+            raise FileNotFoundError(f"Workflow file not found to patch: '{clean_name}'")
+
+    content = target.read_text(encoding="utf-8")
+    count = content.count(old_string)
+    if count == 0:
+        raise ValueError(f"Patch failed: old_string not found in '{clean_name}'")
+    if count > 1:
+        raise ValueError(
+            f"Patch failed: old_string occurs {count} times in '{clean_name}'; must occur exactly once"
+        )
+
+    patched = content.replace(old_string, new_string, 1)
+
+    # Validate YAML structure
+    try:
+        yaml.safe_load(patched)
+    except yaml.YAMLError as ye:
+        raise ValueError(f"YAML syntax error after patch: {ye}")
+
+    target.write_text(patched, encoding="utf-8")
+
+    try:
+        os.utime(session_dir, None)
+    except OSError:
+        pass
+
+    logger.info("Staged workflow patch on '%s' in session %s", clean_name, session_id)
+    return target

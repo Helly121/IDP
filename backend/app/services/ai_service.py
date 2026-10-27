@@ -371,6 +371,54 @@ async def run_agent_stream(
 
                 # Check if this is a mutating tool
                 if registry.is_mutating(tool_name):
+                    # For patch tools, apply patch to staged copy at proposal time.
+                    # Fail immediately if old_string is not found exactly once.
+                    stage_error = None
+                    try:
+                        from app.services import staging_service
+                        if tool_name == "terraform_patch_file":
+                            from app.mcp_servers.terraform_server import _get_iac_root
+                            staging_service.stage_terraform_patch(
+                                session_id=sid,
+                                file_path=tool_params.get("file_path", ""),
+                                old_string=tool_params.get("old_string", ""),
+                                new_string=tool_params.get("new_string", ""),
+                                real_iac_root=_get_iac_root(),
+                            )
+                        elif tool_name == "workflow_patch":
+                            from app.mcp_servers.workflow_server import _get_workflows_root
+                            staging_service.stage_workflow_patch(
+                                session_id=sid,
+                                workflow_name=tool_params.get("file_path") or tool_params.get("workflow_name", ""),
+                                old_string=tool_params.get("old_string", ""),
+                                new_string=tool_params.get("new_string", ""),
+                                real_workflows_root=_get_workflows_root(),
+                            )
+                    except Exception as pe:
+                        stage_error = str(pe)
+                        logger.warning("Patch proposal failed at staging for %s: %s", tool_name, pe)
+
+                    if stage_error:
+                        yield AgentEvent(
+                            type=AgentEventType.TOOL_RESULT,
+                            data={
+                                "tool_name": tool_name,
+                                "success": False,
+                                "error": stage_error,
+                            },
+                            timestamp=now(),
+                        ).to_sse()
+
+                        function_responses.append(
+                            protos.Part(
+                                function_response=protos.FunctionResponse(
+                                    name=tool_name,
+                                    response={"error": stage_error},
+                                )
+                            )
+                        )
+                        continue
+
                     # Create a pending action and yield approval_required
                     async with async_session_factory() as db:
                         action = await approval_service.create_pending_action(
@@ -396,7 +444,7 @@ async def run_agent_stream(
                             timestamp=now(),
                         ).to_sse()
 
-                    # Stage proposed content into per-session staging tree
+                    # Stage proposed content into per-session staging tree for full write tools
                     try:
                         from app.services import staging_service
                         if tool_name == "terraform_write_file":

@@ -286,6 +286,53 @@ class TerraformMCPServer(MCPServerBase):
                 is_mutating=False,
                 category=ToolCategory.TERRAFORM,
             ),
+            ToolDefinition(
+                name="terraform_patch_file",
+                description="Patch file in iac/ by replacing old_string with new_string. Fails if old_string is not found exactly once.",
+                parameters=[
+                    ToolParameter(
+                        name="file_path",
+                        type="string",
+                        description="Relative path within iac/ (e.g. 'environments/dev/main.tf')",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="old_string",
+                        type="string",
+                        description="Exact string to replace (must appear exactly once)",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="new_string",
+                        type="string",
+                        description="Replacement string",
+                        required=True,
+                    ),
+                ],
+                is_mutating=True,
+                category=ToolCategory.TERRAFORM,
+            ),
+            ToolDefinition(
+                name="render_template",
+                description="Render template in iac/templates/*.tpl with variables using Jinja2.",
+                parameters=[
+                    ToolParameter(
+                        name="template_name",
+                        type="string",
+                        description="Template file name under iac/templates/ (e.g. 'deployment.yaml.tpl')",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="variables",
+                        type="object",
+                        description="Dictionary of variables to render into the Jinja2 template",
+                        required=False,
+                        default={},
+                    ),
+                ],
+                is_mutating=False,
+                category=ToolCategory.TERRAFORM,
+            ),
         ]
 
     async def execute_tool(
@@ -299,6 +346,8 @@ class TerraformMCPServer(MCPServerBase):
             "terraform_list_files": lambda p: self._list_files(p, root=effective_root),
             "terraform_get_file": lambda p: self._get_file(p, root=effective_root),
             "terraform_write_file": self._write_file,
+            "terraform_patch_file": self._patch_file,
+            "render_template": lambda p: self._render_template(p, root=effective_root),
             "terraform_fmt": lambda p: self._fmt(p, root=effective_root),
             "terraform_init": lambda p: self._init(p, root=effective_root),
             "terraform_validate": lambda p: self._validate(p, root=effective_root),
@@ -410,6 +459,104 @@ class TerraformMCPServer(MCPServerBase):
                 "message": f"Successfully wrote {file_path}",
             },
         )
+
+    async def _patch_file(self, params: dict) -> ToolResult:
+        file_path = params.get("file_path", "")
+        old_string = params.get("old_string", "")
+        new_string = params.get("new_string", "")
+
+        target_file = self._resolve_safe_path(file_path, root=self._iac_root)
+        if not target_file.exists() or not target_file.is_file():
+            return ToolResult(
+                success=False,
+                error=f"Patch failed on approval: real file '{file_path}' not found.",
+            )
+
+        content = target_file.read_text(encoding="utf-8")
+        count = content.count(old_string)
+        if count == 0:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"Patch failed on approval: old_string not found in real file '{file_path}'. "
+                    f"The real file has changed since the patch was proposed."
+                ),
+            )
+        if count > 1:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"Patch failed on approval: old_string occurs {count} times in real file '{file_path}'. "
+                    f"The real file has changed since the patch was proposed."
+                ),
+            )
+
+        patched = content.replace(old_string, new_string, 1)
+        target_file.write_text(patched, encoding="utf-8")
+        logger.info("Terraform file patched on approval: %s", file_path)
+
+        return ToolResult(
+            success=True,
+            data={
+                "path": file_path,
+                "status": "patched",
+                "size_bytes": len(patched),
+                "message": f"Successfully patched {file_path}",
+            },
+        )
+
+    async def _render_template(self, params: dict, root: Path | None = None) -> ToolResult:
+        import jinja2
+
+        template_name = str(params.get("template_name", "")).strip()
+        variables = params.get("variables") or {}
+        if not isinstance(variables, dict):
+            return ToolResult(success=False, error="Parameter 'variables' must be a JSON object / dict.")
+
+        clean_name = template_name.lstrip("/\\")
+        if clean_name.startswith("templates/"):
+            clean_name = clean_name[len("templates/"):]
+        elif clean_name.startswith("templates\\"):
+            clean_name = clean_name[len("templates\\"):]
+
+        base_templates_root = ((root or self._iac_root) / "templates").resolve()
+        base_templates_root.mkdir(parents=True, exist_ok=True)
+
+        try:
+            target_file = self._resolve_safe_path(clean_name, root=base_templates_root)
+            if not target_file.exists() or not target_file.is_file():
+                if not clean_name.endswith(".tpl"):
+                    target_file = self._resolve_safe_path(clean_name + ".tpl", root=base_templates_root)
+        except PermissionError as pe:
+            return ToolResult(success=False, error=str(pe))
+
+        if not target_file.exists() or not target_file.is_file():
+            # Fallback check against self._iac_root/templates
+            try:
+                real_tpl = (self._iac_root / "templates" / clean_name).resolve()
+                if real_tpl.exists() and real_tpl.is_file():
+                    target_file = real_tpl
+                elif not clean_name.endswith(".tpl") and (self._iac_root / "templates" / (clean_name + ".tpl")).is_file():
+                    target_file = (self._iac_root / "templates" / (clean_name + ".tpl")).resolve()
+                else:
+                    return ToolResult(success=False, error=f"Template '{template_name}' not found under iac/templates/.")
+            except Exception:
+                return ToolResult(success=False, error=f"Template '{template_name}' not found under iac/templates/.")
+
+        try:
+            tpl_text = target_file.read_text(encoding="utf-8")
+            env = jinja2.Environment(undefined=jinja2.Undefined)
+            rendered = env.from_string(tpl_text).render(**variables)
+            return ToolResult(
+                success=True,
+                data={
+                    "template_name": clean_name,
+                    "rendered": rendered,
+                },
+            )
+        except Exception as e:
+            logger.exception("Failed to render template %s", template_name)
+            return ToolResult(success=False, error=f"Template rendering failed: {e}")
 
     async def _run_terraform_cli(self, args: list[str], cwd: Path) -> tuple[int, str, str]:
         """Execute the real Terraform CLI directly using asyncio subprocess with plugin caching."""
