@@ -112,23 +112,35 @@ class TerraformMCPServer(MCPServerBase):
     # Security / Sandboxing
     # ------------------------------------------------------------------
 
-    def _resolve_safe_path(self, relative_path: str = "") -> Path:
+    def _resolve_safe_path(self, relative_path: str = "", root: Path | None = None) -> Path:
         """
-        Safely resolve a path within the allowed IaC root.
+        Safely resolve a path within the allowed IaC root (or staging root).
         Rejects path traversal (e.g. ../), absolute paths outside root,
-        or any target outside self._iac_root.
+        or any target outside base_root.
         """
+        base_root = (root or self._iac_root).resolve()
         clean_rel = relative_path.strip().lstrip("/\\")
-        target = (self._iac_root / clean_rel).resolve()
+        target = (base_root / clean_rel).resolve()
 
         try:
-            target.relative_to(self._iac_root)
+            target.relative_to(base_root)
         except ValueError:
             raise PermissionError(
-                f"Access denied: Path '{relative_path}' escapes IaC workspace '{self._iac_root}'"
+                f"Access denied: Path '{relative_path}' escapes IaC workspace '{base_root}'"
             )
 
         return target
+
+    def _get_active_root(self, ctx: dict | None = None) -> Path:
+        """Return the session staging iac root if staged files exist, else the base iac root."""
+        if ctx and ctx.get("session_id"):
+            from app.services.staging_service import has_staged_terraform, get_staged_iac_root
+            sid = ctx["session_id"]
+            if has_staged_terraform(sid):
+                staged = get_staged_iac_root(sid)
+                if staged:
+                    return staged
+        return self._iac_root
 
     # ------------------------------------------------------------------
     # MCPServerBase interface
@@ -276,15 +288,21 @@ class TerraformMCPServer(MCPServerBase):
             ),
         ]
 
-    async def execute_tool(self, tool_name: str, params: dict) -> ToolResult:
+    async def execute_tool(
+        self,
+        tool_name: str,
+        params: dict,
+        ctx: dict | None = None,
+    ) -> ToolResult:
+        effective_root = self._get_active_root(ctx)
         dispatch = {
-            "terraform_list_files": self._list_files,
-            "terraform_get_file": self._get_file,
+            "terraform_list_files": lambda p: self._list_files(p, root=effective_root),
+            "terraform_get_file": lambda p: self._get_file(p, root=effective_root),
             "terraform_write_file": self._write_file,
-            "terraform_fmt": self._fmt,
-            "terraform_init": self._init,
-            "terraform_validate": self._validate,
-            "terraform_plan": self._plan,
+            "terraform_fmt": lambda p: self._fmt(p, root=effective_root),
+            "terraform_init": lambda p: self._init(p, root=effective_root),
+            "terraform_validate": lambda p: self._validate(p, root=effective_root),
+            "terraform_plan": lambda p: self._plan(p, root=effective_root),
         }
         handler = dispatch.get(tool_name)
         if handler is None:
@@ -302,9 +320,10 @@ class TerraformMCPServer(MCPServerBase):
     # Tool Implementations
     # ------------------------------------------------------------------
 
-    async def _list_files(self, params: dict) -> ToolResult:
+    async def _list_files(self, params: dict, root: Path | None = None) -> ToolResult:
         subpath = params.get("subpath", "")
-        target_dir = self._resolve_safe_path(subpath)
+        base_root = (root or self._iac_root).resolve()
+        target_dir = self._resolve_safe_path(subpath, root=base_root)
 
         if not target_dir.exists():
             return ToolResult(success=False, error=f"Directory '{subpath}' does not exist in iac workspace")
@@ -313,14 +332,14 @@ class TerraformMCPServer(MCPServerBase):
             return ToolResult(success=False, error=f"Path '{subpath}' is not a directory")
 
         files_list = []
-        for root, dirs, files in os.walk(target_dir):
+        for r, dirs, files in os.walk(target_dir):
             # Skip hidden dirs like .terraform
             dirs[:] = [d for d in dirs if not d.startswith(".")]
             for file in files:
                 if file.startswith("."):
                     continue
-                full_p = Path(root) / file
-                rel_p = full_p.relative_to(self._iac_root).as_posix()
+                full_p = Path(r) / file
+                rel_p = full_p.relative_to(base_root).as_posix()
                 files_list.append({
                     "path": rel_p,
                     "size_bytes": full_p.stat().st_size,
@@ -336,9 +355,9 @@ class TerraformMCPServer(MCPServerBase):
             },
         )
 
-    async def _get_file(self, params: dict) -> ToolResult:
+    async def _get_file(self, params: dict, root: Path | None = None) -> ToolResult:
         file_path = params["file_path"]
-        target_file = self._resolve_safe_path(file_path)
+        target_file = self._resolve_safe_path(file_path, root=root)
 
         if not target_file.exists():
             return ToolResult(success=False, error=f"File '{file_path}' does not exist in iac workspace")
@@ -375,7 +394,7 @@ class TerraformMCPServer(MCPServerBase):
     async def _write_file(self, params: dict) -> ToolResult:
         file_path = params["file_path"]
         content = params["content"]
-        target_file = self._resolve_safe_path(file_path)
+        target_file = self._resolve_safe_path(file_path, root=self._iac_root)
 
         # Ensure parent directory exists within safe root
         target_file.parent.mkdir(parents=True, exist_ok=True)
@@ -393,13 +412,22 @@ class TerraformMCPServer(MCPServerBase):
         )
 
     async def _run_terraform_cli(self, args: list[str], cwd: Path) -> tuple[int, str, str]:
-        """Execute the real Terraform CLI directly using asyncio subprocess."""
+        """Execute the real Terraform CLI directly using asyncio subprocess with plugin caching."""
         terraform_bin = shutil.which("terraform") or "/usr/local/bin/terraform"
+
+        env = os.environ.copy()
+        plugin_cache = settings.TF_PLUGIN_CACHE_DIR or str(Path.home() / ".terraform.d" / "plugin-cache")
+        try:
+            Path(plugin_cache).mkdir(parents=True, exist_ok=True)
+            env["TF_PLUGIN_CACHE_DIR"] = plugin_cache
+        except Exception as e:
+            logger.warning("Failed to initialize TF_PLUGIN_CACHE_DIR '%s': %s", plugin_cache, e)
 
         proc = await asyncio.create_subprocess_exec(
             terraform_bin,
             *args,
             cwd=str(cwd),
+            env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -409,10 +437,10 @@ class TerraformMCPServer(MCPServerBase):
         stderr = stderr_b.decode("utf-8", errors="replace")
         return proc.returncode or 0, stdout, stderr
 
-    async def _fmt(self, params: dict) -> ToolResult:
+    async def _fmt(self, params: dict, root: Path | None = None) -> ToolResult:
         subpath = params.get("path", "")
         check = bool(params.get("check", False))
-        target_path = self._resolve_safe_path(subpath)
+        target_path = self._resolve_safe_path(subpath, root=root)
 
         if not target_path.exists():
             return ToolResult(success=False, error=f"Path '{subpath}' does not exist in iac workspace")
@@ -457,9 +485,9 @@ class TerraformMCPServer(MCPServerBase):
             },
         )
 
-    async def _init(self, params: dict) -> ToolResult:
+    async def _init(self, params: dict, root: Path | None = None) -> ToolResult:
         directory = params.get("directory", "environments/dev")
-        target_dir = self._resolve_safe_path(directory)
+        target_dir = self._resolve_safe_path(directory, root=root)
 
         if not target_dir.exists() or not target_dir.is_dir():
             return ToolResult(success=False, error=f"Directory '{directory}' does not exist in iac workspace")
@@ -485,9 +513,9 @@ class TerraformMCPServer(MCPServerBase):
             },
         )
 
-    async def _validate(self, params: dict) -> ToolResult:
+    async def _validate(self, params: dict, root: Path | None = None) -> ToolResult:
         directory = params.get("directory", "environments/dev")
-        target_dir = self._resolve_safe_path(directory)
+        target_dir = self._resolve_safe_path(directory, root=root)
 
         if not target_dir.exists() or not target_dir.is_dir():
             return ToolResult(success=False, error=f"Directory '{directory}' does not exist in iac workspace")
@@ -524,10 +552,10 @@ class TerraformMCPServer(MCPServerBase):
                 error=stderr if code != 0 else None,
             )
 
-    async def _plan(self, params: dict) -> ToolResult:
+    async def _plan(self, params: dict, root: Path | None = None) -> ToolResult:
         directory = params.get("directory", "environments/dev")
         var_file = params.get("var_file")
-        target_dir = self._resolve_safe_path(directory)
+        target_dir = self._resolve_safe_path(directory, root=root)
 
         if not target_dir.exists() or not target_dir.is_dir():
             return ToolResult(success=False, error=f"Directory '{directory}' does not exist in iac workspace")
@@ -535,7 +563,7 @@ class TerraformMCPServer(MCPServerBase):
         args = ["plan", "-no-color"]
         if var_file:
             # Validate var_file path stays inside directory or iac root
-            vf_path = self._resolve_safe_path(f"{directory}/{var_file}" if not var_file.startswith("/") else var_file)
+            vf_path = self._resolve_safe_path(f"{directory}/{var_file}" if not var_file.startswith("/") else var_file, root=root)
             if vf_path.exists():
                 args.append(f"-var-file={vf_path.name}")
 

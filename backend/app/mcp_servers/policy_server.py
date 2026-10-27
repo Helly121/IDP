@@ -54,7 +54,6 @@ class PolicyMCPServer(MCPServerBase):
                 name="policy_check_quota",
                 description="Validate if requested replicas and db_type comply with user quota.",
                 parameters=[
-                    ToolParameter(name="user_id", type="string", description="User UUID"),
                     ToolParameter(name="requested_replicas", type="integer", description="Requested replica count"),
                     ToolParameter(name="db_type", type="string", description="postgres, mongodb, redis, or none", required=False),
                 ],
@@ -74,9 +73,7 @@ class PolicyMCPServer(MCPServerBase):
             ToolDefinition(
                 name="policy_get_user_role",
                 description="Get user role, project count, and resource usage.",
-                parameters=[
-                    ToolParameter(name="user_id", type="string", description="User UUID"),
-                ],
+                parameters=[],
                 is_mutating=False,
                 category=ToolCategory.POLICY,
             ),
@@ -84,8 +81,6 @@ class PolicyMCPServer(MCPServerBase):
                 name="policy_approve_escalation",
                 description="Approve over-quota request for student. Guide/admin only.",
                 parameters=[
-                    ToolParameter(name="user_id", type="string", description="Student UUID"),
-                    ToolParameter(name="approver_id", type="string", description="Guide/admin UUID"),
                     ToolParameter(name="requested_replicas", type="integer", description="Approved replica count"),
                 ],
                 is_mutating=True,
@@ -93,7 +88,16 @@ class PolicyMCPServer(MCPServerBase):
             ),
         ]
 
-    async def execute_tool(self, tool_name: str, params: dict) -> ToolResult:
+    async def execute_tool(
+        self,
+        tool_name: str,
+        params: dict,
+        ctx: dict | None = None,
+    ) -> ToolResult:
+        # Identity injection: override model-supplied user_id with server-side ctx user_id
+        if ctx and ctx.get("user_id"):
+            params["user_id"] = str(ctx["user_id"])
+
         dispatch = {
             "policy_check_quota": self._check_quota,
             "policy_estimate_cost": self._estimate_cost,
@@ -114,7 +118,10 @@ class PolicyMCPServer(MCPServerBase):
     # ------------------------------------------------------------------
 
     async def _check_quota(self, params: dict) -> ToolResult:
-        user_id = uuid.UUID(params["user_id"])
+        uid_raw = params.get("user_id")
+        if not uid_raw:
+            return ToolResult(success=False, error="user_id is required in execution context")
+        user_id = uuid.UUID(str(uid_raw))
         requested_replicas = params["requested_replicas"]
 
         async with async_session_factory() as db:
@@ -170,7 +177,10 @@ class PolicyMCPServer(MCPServerBase):
         })
 
     async def _get_user_role(self, params: dict) -> ToolResult:
-        user_id = uuid.UUID(params["user_id"])
+        uid_raw = params.get("user_id")
+        if not uid_raw:
+            return ToolResult(success=False, error="user_id is required in execution context")
+        user_id = uuid.UUID(str(uid_raw))
 
         async with async_session_factory() as db:
             user = await db.get(User, user_id)
@@ -196,7 +206,10 @@ class PolicyMCPServer(MCPServerBase):
             })
 
     async def _approve_escalation(self, params: dict) -> ToolResult:
-        approver_id = uuid.UUID(params["approver_id"])
+        approver_raw = params.get("approver_id")
+        if not approver_raw:
+            return ToolResult(success=False, error="approver_id must be provided by reviewer approval")
+        approver_id = uuid.UUID(str(approver_raw))
 
         async with async_session_factory() as db:
             approver = await db.get(User, approver_id)
@@ -207,8 +220,9 @@ class PolicyMCPServer(MCPServerBase):
 
             return ToolResult(success=True, data={
                 "approved": True,
-                "user_id": params["user_id"],
+                "user_id": params.get("user_id"),
                 "approved_by": str(approver_id),
-                "approved_replicas": params["requested_replicas"],
+                "approved_replicas": params.get("requested_replicas"),
                 "message": f"Escalation approved by {approver.full_name or approver.email}",
             })
+

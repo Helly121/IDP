@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     IAC_DIR: str = "/app/iac"
     WORKFLOWS_DIR: str = "/app/.github/workflows"
 
+    # ── Staging Workspace ──────────────────────────────────
+    STAGING_ROOT: str = "./staging"
+    STAGING_TTL_MINUTES: int = 60
+    TF_PLUGIN_CACHE_DIR: str = ""
+
     # ── App ──────────────────────────────────────────────
     APP_NAME: str = "Academic IDP"
     APP_VERSION: str = "0.2.0"

@@ -109,8 +109,13 @@ class MCPServerBase(ABC):
         ...
 
     @abstractmethod
-    async def execute_tool(self, tool_name: str, params: dict) -> ToolResult:
-        """Execute a named tool with the given parameters."""
+    async def execute_tool(
+        self,
+        tool_name: str,
+        params: dict,
+        ctx: dict | None = None,
+    ) -> ToolResult:
+        """Execute a named tool with the given parameters and optional execution context."""
         ...
 
     def is_available(self) -> bool:

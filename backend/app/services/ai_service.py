@@ -396,6 +396,28 @@ async def run_agent_stream(
                             timestamp=now(),
                         ).to_sse()
 
+                    # Stage proposed content into per-session staging tree
+                    try:
+                        from app.services import staging_service
+                        if tool_name == "terraform_write_file":
+                            from app.mcp_servers.terraform_server import _get_iac_root
+                            staging_service.stage_terraform_file(
+                                session_id=sid,
+                                file_path=tool_params.get("file_path", ""),
+                                content=tool_params.get("content", ""),
+                                real_iac_root=_get_iac_root(),
+                            )
+                        elif tool_name == "workflow_write":
+                            from app.mcp_servers.workflow_server import _get_workflows_root
+                            staging_service.stage_workflow_file(
+                                session_id=sid,
+                                workflow_name=tool_params.get("workflow_name", ""),
+                                content=tool_params.get("content", ""),
+                                real_workflows_root=_get_workflows_root(),
+                            )
+                    except Exception as se:
+                        logger.warning("Failed to stage %s for session %s: %s", tool_name, sid, se)
+
                     # Feed back a "pending" result to Gemini so it can continue reasoning
                     function_responses.append(
                         protos.Part(
@@ -412,8 +434,12 @@ async def run_agent_stream(
                         )
                     )
                 else:
-                    # Read-only tool: execute immediately
-                    result = await registry.dispatch(tool_name, tool_params)
+                    # Read-only tool: execute immediately with session and user context
+                    ctx = {
+                        "user_id": str(uid) if uid else (str(user_id) if user_id else None),
+                        "session_id": str(sid),
+                    }
+                    result = await registry.dispatch(tool_name, tool_params, ctx=ctx)
                     raw_result = result.to_dict()
 
                     # Yield: tool_result event using UI limit (UI_RESULT_MAX_CHARS)
