@@ -31,10 +31,12 @@ def test_registry_initialization():
     assert "workflow_get" in tool_names
     assert "workflow_write" in tool_names
     assert "workflow_validate" in tool_names
+    assert "catalog_list_projects" in tool_names
     
     # Check mutating flags for registered Terraform and CI/CD tools
     assert reg.is_mutating("terraform_write_file") is True
     assert reg.is_mutating("workflow_write") is True
+    assert reg.is_mutating("catalog_list_projects") is False
     
     # Check non-mutating flags
     assert reg.is_mutating("terraform_list_files") is False

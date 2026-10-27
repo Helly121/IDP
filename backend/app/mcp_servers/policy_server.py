@@ -17,6 +17,7 @@ from app.core.database import async_session_factory
 from app.models.user import User, UserRole
 from app.models.project import Project
 from app.models.deployment import Deployment, DeploymentStatus, DatabaseType
+from app.services import project_service
 from app.mcp_servers.base import (
     MCPServerBase,
     ToolCategory,
@@ -78,6 +79,18 @@ class PolicyMCPServer(MCPServerBase):
                 category=ToolCategory.POLICY,
             ),
             ToolDefinition(
+                name="catalog_list_projects",
+                description=(
+                    "List the requesting user's services and their saved configuration, "
+                    "including language, framework, database type, replicas, and namespace."
+                ),
+                parameters=[
+                    ToolParameter(name="user_id", type="string", description="UUID of the authenticated user"),
+                ],
+                is_mutating=False,
+                category=ToolCategory.POLICY,
+            ),
+            ToolDefinition(
                 name="policy_approve_escalation",
                 description="Approve over-quota request for student. Guide/admin only.",
                 parameters=[
@@ -102,6 +115,7 @@ class PolicyMCPServer(MCPServerBase):
             "policy_check_quota": self._check_quota,
             "policy_estimate_cost": self._estimate_cost,
             "policy_get_user_role": self._get_user_role,
+            "catalog_list_projects": self._list_projects,
             "policy_approve_escalation": self._approve_escalation,
         }
         handler = dispatch.get(tool_name)
@@ -116,6 +130,32 @@ class PolicyMCPServer(MCPServerBase):
     # ------------------------------------------------------------------
     # Tool implementations
     # ------------------------------------------------------------------
+
+    async def _list_projects(self, params: dict) -> ToolResult:
+        user_id = uuid.UUID(params["user_id"])
+
+        async with async_session_factory() as db:
+            projects = await project_service.list_projects(db, user_id)
+            services = []
+            for project in projects:
+                latest = (
+                    max(
+                        project.deployments,
+                        key=lambda deployment: deployment.created_at,
+                    )
+                    if project.deployments
+                    else None
+                )
+                services.append({
+                    "id": str(project.id),
+                    "service_name": project.service_name,
+                    "language": project.language,
+                    "framework": project.framework,
+                    "db_type": latest.db_type.value if latest else None,
+                    "replicas": latest.replicas if latest else None,
+                    "namespace": latest.namespace if latest else None,
+                })
+            return ToolResult(success=True, data={"services": services})
 
     async def _check_quota(self, params: dict) -> ToolResult:
         uid_raw = params.get("user_id")

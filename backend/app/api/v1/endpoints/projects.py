@@ -8,12 +8,40 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import require_auth
-from app.models.project import Project
-from app.schemas.project import ProjectCreate, ProjectResponse, ProjectStatusResponse
+from app.core.security import get_current_user, require_auth
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectResponse,
+    ProjectCatalogResponse,
+    ProjectStatusResponse,
+)
 from app.services import project_service
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+DEMO_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+def _get_owner_id(current_user: dict | None) -> uuid.UUID:
+    if current_user and "sub" in current_user:
+        return uuid.UUID(current_user["sub"])
+    return DEMO_USER_ID
+
+
+def _serialize_project(project: Project) -> ProjectCatalogResponse:
+    latest = (
+        max(project.deployments, key=lambda deployment: deployment.created_at)
+        if project.deployments
+        else None
+    )
+    return ProjectCatalogResponse(
+        **ProjectResponse.model_validate(project).model_dump(),
+        status=latest.status.value if latest else None,
+        replicas=latest.replicas if latest else None,
+        db_type=latest.db_type.value if latest else None,
+        cost_estimate=float(latest.cost_estimate) if latest and latest.cost_estimate is not None else None,
+        namespace=latest.namespace if latest else None,
+        deployment_id=latest.id if latest else None,
+    )
 
 
 @router.get(
@@ -61,7 +89,12 @@ async def create_project(
 
     Requires authentication. The project owner is set to the authenticated user.
     """
-    owner_id = uuid.UUID(current_user["sub"])
+    # Use authenticated user ID or fallback to a demo UUID
+    if current_user and "sub" in current_user:
+        owner_id = uuid.UUID(current_user["sub"])
+    else:
+        # Demo mode — create with a fixed demo user ID
+        owner_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
     # RBAC check — enforced via the User's role in the database
     allowed, reason = await project_service.check_rbac(db, owner_id, payload.replicas)
@@ -82,6 +115,20 @@ async def create_project(
         cost_estimate=float(deployment.cost_estimate),
         namespace=deployment.namespace,
     )
+
+
+@router.get(
+    "",
+    response_model=list[ProjectCatalogResponse],
+    summary="List the current user's projects and deployment metadata",
+)
+async def list_projects(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict | None = Depends(get_current_user),
+):
+    """Return only projects owned by the authenticated user (or demo user)."""
+    projects = await project_service.list_projects(db, _get_owner_id(current_user))
+    return [_serialize_project(project) for project in projects]
 
 
 @router.get(

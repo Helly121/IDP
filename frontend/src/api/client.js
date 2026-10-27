@@ -108,7 +108,6 @@ const api = {
         message,
         user_id: resolvedUserId,
         project_id: context.project_id || null,
-        session_id: context.session_id || null,
       }),
     });
   },

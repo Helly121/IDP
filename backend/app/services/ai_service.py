@@ -22,6 +22,7 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.database import async_session_factory
+from app.models.project import Project
 from app.mcp_servers.registry import registry
 from app.schemas.agent import AgentEvent, AgentEventType
 from app.services import approval_service
@@ -33,6 +34,7 @@ from app.services.context_budget import (
 
 from app.mcp_servers.base import ToolCategory
 from app.services.tool_router import select_tool_categories
+from app.services import project_service
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +196,7 @@ async def run_agent_stream(
     Each yield is a fully-formatted SSE string (event + data + newlines).
     """
     sid = uuid.UUID(session_id) if session_id else uuid.uuid4()
-    uid = uuid.UUID(user_id) if user_id else None
+
     now = lambda: datetime.now(timezone.utc)
 
     # Yield: thinking
@@ -210,6 +212,44 @@ async def run_agent_stream(
 
     if model is None:
         model = _get_gemini_model(cat_key)
+    try:
+        uid = uuid.UUID(user_id)
+        target_project_id = uuid.UUID(project_id) if project_id else None
+        async with async_session_factory() as db:
+            projects = await project_service.list_projects(db, uid)
+    except (ValueError, TypeError):
+        yield AgentEvent(
+            type=AgentEventType.ERROR,
+            data={"message": "The user or selected service ID is invalid."},
+            timestamp=now(),
+        ).to_sse()
+        return
+    except Exception:
+        logger.exception("Failed to load projects for agent context")
+        yield AgentEvent(
+            type=AgentEventType.ERROR,
+            data={"message": "Unable to load your services. Please try again."},
+            timestamp=now(),
+        ).to_sse()
+        return
+
+    target_project = (
+        next(
+            (project for project in projects if project.id == target_project_id),
+            None,
+        )
+        if target_project_id
+        else None
+    )
+    if target_project_id and target_project is None:
+        yield AgentEvent(
+            type=AgentEventType.ERROR,
+            data={"message": "The selected service was not found or is not accessible."},
+            timestamp=now(),
+        ).to_sse()
+        return
+
+    model = _get_gemini_model()
     if model is None:
         yield AgentEvent(
             type=AgentEventType.ERROR,
@@ -218,11 +258,39 @@ async def run_agent_stream(
         ).to_sse()
         return
 
-    # Build initial context
-    context_parts = [message]
-    if project_id:
-        context_parts.append(f"\n[Context: This request is related to project ID {project_id}]")
-    context_parts.append(f"\n[User ID: {user_id}]")
+    def deployment_context(project: Project) -> str:
+        latest = max(
+            project.deployments,
+            key=lambda deployment: deployment.created_at,
+        ) if project.deployments else None
+        if latest is None:
+            return "deployment metadata: not recorded"
+        return (
+            f"status={latest.status.value}, replicas={latest.replicas}, "
+            f"db_type={latest.db_type.value}, "
+            f"cost_estimate_monthly_usd={latest.cost_estimate}, "
+            f"namespace={latest.namespace or 'not set'}"
+        )
+
+    context_parts = [message, f"\n[Authenticated user ID: {uid}]"]
+    if projects:
+        context_parts.append("\n[User's saved services]")
+        for project in projects:
+            context_parts.append(
+                f"- id={project.id}, name={project.service_name}, "
+                f"language={project.language}, framework={project.framework or 'not specified'}, "
+                f"{deployment_context(project)}"
+            )
+    else:
+        context_parts.append("\n[User's saved services: none]")
+    if target_project:
+        context_parts.append(
+            "\n[ACTIVE TARGET SERVICE — use this exact service configuration for the request]\n"
+            f"id={target_project.id}, name={target_project.service_name}, "
+            f"language={target_project.language}, "
+            f"framework={target_project.framework or 'not specified'}, "
+            f"{deployment_context(target_project)}"
+        )
 
     try:
         # Start a chat session for multi-turn tool calling
@@ -492,6 +560,12 @@ async def run_agent_stream(
 
                     # Yield: tool_result event using UI limit (UI_RESULT_MAX_CHARS)
                     ui_result = compact_for_ui(tool_name, raw_result)
+                    # Read-only tool: execute immediately
+                    if tool_name == "catalog_list_projects":
+                        tool_params["user_id"] = str(uid)
+                    result = await registry.dispatch(tool_name, tool_params)
+
+                    # Yield: tool_result event
                     yield AgentEvent(
                         type=AgentEventType.TOOL_RESULT,
                         data={

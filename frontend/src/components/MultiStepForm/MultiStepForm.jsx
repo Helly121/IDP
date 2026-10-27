@@ -3,8 +3,10 @@
  * Exact Spotify Portal 2-Column "Try-Portal" Layout (Screenshot 1)
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../api/client';
+import { calculateServiceEffort } from '../../utils/benchmarkMetrics';
 import './MultiStepForm.css';
 
 const LANGUAGES = [
@@ -46,6 +48,31 @@ export default function MultiStepForm() {
     db_type: 'postgres',
     replicas: 2,
   });
+
+  const liveEffort = useMemo(() => {
+    return calculateServiceEffort({
+      language: formData.language,
+      framework: formData.framework,
+      db_type: formData.db_type,
+      replicas: formData.replicas,
+    });
+  }, [formData.language, formData.framework, formData.db_type, formData.replicas]);
+
+  const createdEffort = useMemo(() => {
+    if (!result) return null;
+    return calculateServiceEffort({
+      language: result.project?.language || formData.language,
+      framework: result.project?.framework || formData.framework,
+      db_type: result.db_type || formData.db_type,
+      replicas: result.replicas || formData.replicas,
+    });
+  }, [
+    result,
+    formData.language,
+    formData.framework,
+    formData.db_type,
+    formData.replicas,
+  ]);
 
   const updateField = useCallback((field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -176,10 +203,55 @@ export default function MultiStepForm() {
                 </svg>
               </div>
 
-              <h3 className="try-success-title">Service Provisioned Successfully!</h3>
+              <h3 className="try-success-title">Service Created in DevHub Catalog!</h3>
               <p className="try-success-sub">
-                Workload <strong>idp-{result.project?.service_name || formData.service_name}</strong> is now registered and reconciling in the cluster.
+                Workload <strong>idp-{result.project?.service_name || formData.service_name}</strong> is registered. Cluster GitOps reconciliation has been scheduled.
               </p>
+
+              {/* Distinguish service creation from successful deployment */}
+              <div className="try-lifecycle-bar" aria-label="Service lifecycle stages">
+                <div className="lifecycle-chip chip-success">
+                  <span className="chip-indicator">✓</span>
+                  <div className="chip-text">
+                    <strong>Service Creation</strong>
+                    <span>Catalog Registered</span>
+                  </div>
+                </div>
+                <div className="lifecycle-chip chip-pending">
+                  <span className="chip-indicator">⏳</span>
+                  <div className="chip-text">
+                    <strong>Cluster Deployment</strong>
+                    <span>{result.status ? `Status: ${result.status}` : 'Reconciling via GitOps'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quantitative Time Saved & Boilerplate Avoided (Shown ONLY after creation succeeds) */}
+              {createdEffort && (
+                <div className="try-success-impact-card">
+                  <div className="impact-card-top">
+                    <span className="impact-card-kicker">WORKLOAD IMPACT BENCHMARK</span>
+                    <span className="impact-card-badge">*Estimated Savings</span>
+                  </div>
+                  <div className="impact-stats-grid">
+                    <div className="impact-stat-item">
+                      <span className="impact-stat-number text-green">~{createdEffort.timeSavedFormatted}</span>
+                      <span className="impact-stat-desc">Engineering Time Saved</span>
+                    </div>
+                    <div className="impact-stat-item">
+                      <span className="impact-stat-number text-green">~{createdEffort.boilerplateAvoidedLines} lines</span>
+                      <span className="impact-stat-desc">YAML / IaC Avoided</span>
+                    </div>
+                    <div className="impact-stat-item">
+                      <span className="impact-stat-number text-green">&lt; 2%</span>
+                      <span className="impact-stat-desc">Config Failure Risk</span>
+                    </div>
+                  </div>
+                  <div className="impact-card-disclaimer">
+                    *Estimated benchmark comparison vs manual infrastructure provisioning ({createdEffort.manualSteps} manual steps automated into 1 self-service flow).
+                  </div>
+                </div>
+              )}
 
               <div className="try-spec-summary">
                 <div className="spec-row">
@@ -191,8 +263,8 @@ export default function MultiStepForm() {
                   <span className="spec-val text-green">{result.namespace || `idp-${formData.service_name}`}</span>
                 </div>
                 <div className="spec-row">
-                  <span className="spec-label">Deployment Status</span>
-                  <span className="spec-val text-green">{result.status || 'Active'}</span>
+                  <span className="spec-label">Deployment Sync</span>
+                  <span className="spec-val text-green">{result.status || 'Active / Reconciling'}</span>
                 </div>
                 <div className="spec-row">
                   <span className="spec-label">Monthly Allocation</span>
@@ -200,9 +272,20 @@ export default function MultiStepForm() {
                 </div>
               </div>
 
-              <button className="btn btn-pill-submit" onClick={resetForm} style={{ marginTop: '2rem' }}>
-                Provision Another Service
-              </button>
+              <div className="try-success-actions">
+                <Link to="/" className="btn btn-secondary">View in Services Dashboard</Link>
+                {result.project?.id && (
+                  <Link
+                    to={`/agent?serviceId=${encodeURIComponent(result.project.id)}&serviceName=${encodeURIComponent(result.project.service_name || formData.service_name)}`}
+                    className="btn btn-primary"
+                  >
+                    Open in DevSecOps Mentor
+                  </Link>
+                )}
+                <button className="btn btn-pill-submit" onClick={resetForm}>
+                  Provision Another Service
+                </button>
+              </div>
             </div>
           ) : (
             /* Main Form */
@@ -335,6 +418,70 @@ export default function MultiStepForm() {
                   onChange={(e) => updateField('replicas', parseInt(e.target.value))}
                   style={{ width: '100%', accentColor: '#1ed760', cursor: 'pointer' }}
                 />
+              </div>
+
+              {/* Row 6: Live Manual vs. DevHub Effort Comparison */}
+              <div className="try-benchmark-card" aria-label="Live Effort Benchmark">
+                <div className="try-benchmark-header">
+                  <div className="try-benchmark-title-wrap">
+                    <span className="try-benchmark-badge">LIVE BENCHMARK</span>
+                    <h4 className="try-benchmark-title">Manual vs. DevHub Effort Comparison</h4>
+                  </div>
+                  <span className="try-benchmark-estimate-pill">
+                    *Live Estimate: {formData.language} • {formData.db_type === 'none' ? 'Stateless' : formData.db_type} • {formData.replicas} {formData.replicas === 1 ? 'Pod' : 'Pods'}
+                  </span>
+                </div>
+
+                <div className="try-benchmark-grid">
+                  <div className="try-bench-item">
+                    <span className="try-bench-label">Initial Provisioning Time</span>
+                    <div className="try-bench-comparison">
+                      <span className="bench-manual" title="Estimated manual provisioning time">{liveEffort.manualTimeFormatted}</span>
+                      <span className="bench-arrow">vs</span>
+                      <span className="bench-devhub" title="DevHub self-service time">{liveEffort.devhubTimeFormatted}</span>
+                    </div>
+                    <span className="try-bench-sub text-green">Save ~{liveEffort.timeSavedFormatted}</span>
+                  </div>
+
+                  <div className="try-bench-item">
+                    <span className="try-bench-label">Infrastructure Boilerplate</span>
+                    <div className="try-bench-comparison">
+                      <span className="bench-manual" title="Manual YAML / IaC lines">~{liveEffort.boilerplateAvoidedLines} lines</span>
+                      <span className="bench-arrow">vs</span>
+                      <span className="bench-devhub" title="DevHub boilerplate needed">0 lines</span>
+                    </div>
+                    <span className="try-bench-sub text-green">100% automated scaffolding</span>
+                  </div>
+
+                  <div className="try-bench-item">
+                    <span className="try-bench-label">Manual Setup Steps</span>
+                    <div className="try-bench-comparison">
+                      <span className="bench-manual">{liveEffort.manualSteps} manual steps</span>
+                      <span className="bench-arrow">vs</span>
+                      <span className="bench-devhub">1 form submit</span>
+                    </div>
+                    <span className="try-bench-sub text-green">Risk &lt; 2% (vs ~28% manual)</span>
+                  </div>
+                </div>
+
+                <div className="try-benchmark-meter-bar">
+                  <div className="meter-track">
+                    <div
+                      className="meter-fill"
+                      style={{
+                        width: `${Math.min(98, Math.max(70, Math.round(((liveEffort.manualTimeMinutes - 1) / liveEffort.manualTimeMinutes) * 100)))}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="meter-footer">
+                    <span className="meter-text">
+                      ⚡ Save ~{liveEffort.timeSavedFormatted} on this service with automated golden paths
+                    </span>
+                    <span className="meter-disclaimer">
+                      *Estimated benchmark
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Agreement Checkbox (Screenshot 1 Style) */}
