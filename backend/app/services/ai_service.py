@@ -25,6 +25,11 @@ from app.core.database import async_session_factory
 from app.mcp_servers.registry import registry
 from app.schemas.agent import AgentEvent, AgentEventType
 from app.services import approval_service
+from app.services.context_budget import (
+    compact_for_model,
+    compact_for_ui,
+    compact_chat_history,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -400,26 +405,36 @@ async def run_agent_stream(
                 else:
                     # Read-only tool: execute immediately
                     result = await registry.dispatch(tool_name, tool_params)
+                    raw_result = result.to_dict()
 
-                    # Yield: tool_result event
+                    # Yield: tool_result event using UI limit (UI_RESULT_MAX_CHARS)
+                    ui_result = compact_for_ui(tool_name, raw_result)
                     yield AgentEvent(
                         type=AgentEventType.TOOL_RESULT,
                         data={
                             "tool_name": tool_name,
                             "success": result.success,
-                            "result": result.to_dict(),
+                            "result": ui_result,
                         },
                         timestamp=now(),
                     ).to_sse()
 
+                    # Feed compacted result to model using model limit (TOOL_RESULT_MAX_CHARS)
+                    model_result = compact_for_model(tool_name, raw_result)
                     function_responses.append(
                         protos.Part(
                             function_response=protos.FunctionResponse(
                                 name=tool_name,
-                                response={"result": result.to_dict()},
+                                response={"result": model_result},
                             )
                         )
                     )
+
+            # History control: compact older function_response turns in chat.history to one-line stubs.
+            # Latest iteration's function_responses stay full.
+            # Model-role parts (thought signatures, tool calls) are NEVER touched.
+            if hasattr(chat, "history") and isinstance(chat.history, list):
+                compact_chat_history(chat.history)
 
             # Send all function responses back to Gemini asynchronously for the next iteration
             response = None

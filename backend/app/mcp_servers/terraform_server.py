@@ -159,13 +159,25 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_get_file",
-                description="Read the contents of a Terraform file within the iac/ workspace.",
+                description="Read the contents of a Terraform file within the iac/ workspace. Supports line range pagination (default first 200 lines).",
                 parameters=[
                     ToolParameter(
                         name="file_path",
                         type="string",
                         description="Relative path to the file within iac/ (e.g. 'environments/dev/main.tf')",
                         required=True,
+                    ),
+                    ToolParameter(
+                        name="start_line",
+                        type="integer",
+                        description="Optional starting line number (1-indexed, default 1)",
+                        required=False,
+                    ),
+                    ToolParameter(
+                        name="end_line",
+                        type="integer",
+                        description="Optional ending line number (1-indexed, default min(200, total_lines))",
+                        required=False,
                     ),
                 ],
                 is_mutating=False,
@@ -351,13 +363,29 @@ class TerraformMCPServer(MCPServerBase):
         if not target_file.is_file():
             return ToolResult(success=False, error=f"Path '{file_path}' is not a file")
 
-        content = target_file.read_text(encoding="utf-8", errors="replace")
+        raw_content = target_file.read_text(encoding="utf-8", errors="replace")
+        lines = raw_content.splitlines(keepends=True)
+        total_lines = len(lines)
+
+        start_line = params.get("start_line")
+        end_line = params.get("end_line")
+
+        start = max(1, int(start_line)) if start_line is not None else 1
+        end = min(total_lines, int(end_line)) if end_line is not None else min(200, total_lines)
+        if start > total_lines:
+            sliced_content = ""
+        else:
+            sliced_content = "".join(lines[start - 1 : end])
+
         return ToolResult(
             success=True,
             data={
                 "path": file_path,
-                "content": content,
-                "size_bytes": len(content),
+                "content": sliced_content,
+                "start_line": start,
+                "end_line": end,
+                "total_lines": total_lines,
+                "size_bytes": len(sliced_content),
             },
         )
 

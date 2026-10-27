@@ -1,4 +1,4 @@
-﻿"""
+"""
 Kubernetes MCP Server — Tools for querying and managing Kubernetes clusters.
 
 Supports kubeconfig-file mode (local dev with Docker Desktop) and
@@ -87,7 +87,7 @@ class KubernetesMCPServer(MCPServerBase):
                 parameters=[
                     ToolParameter(name="namespace", type="string", description="Kubernetes namespace"),
                     ToolParameter(name="pod_name", type="string", description="Exact pod name"),
-                    ToolParameter(name="tail_lines", type="integer", description="Number of recent lines to return", required=False),
+                    ToolParameter(name="tail_lines", type="integer", description="Number of recent lines to return (default 50)", required=False, default=50),
                     ToolParameter(name="previous", type="boolean", description="If true, return logs from the previous terminated container", required=False),
                 ],
                 is_mutating=False,
@@ -170,7 +170,7 @@ class KubernetesMCPServer(MCPServerBase):
     def _get_pod_logs(self, params: dict) -> ToolResult:
         ns = params["namespace"]
         pod = params["pod_name"]
-        tail = params.get("tail_lines", 100)
+        tail = params.get("tail_lines", 50)
         previous = params.get("previous", False)
 
         logs = self._v1.read_namespaced_pod_log(
@@ -179,7 +179,10 @@ class KubernetesMCPServer(MCPServerBase):
             tail_lines=tail,
             previous=previous,
         )
-        return ToolResult(success=True, data={"pod": pod, "logs": logs})
+        # Collapse consecutive identical lines to reduce log volume
+        from app.services.context_budget import collapse_identical_lines
+        collapsed_logs = collapse_identical_lines(logs)
+        return ToolResult(success=True, data={"pod": pod, "logs": collapsed_logs})
 
     def _get_namespace_resources(self, params: dict) -> ToolResult:
         ns = params["namespace"]

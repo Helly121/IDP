@@ -3,7 +3,7 @@
 ## Baseline
 
 **Benchmark Mode:** Offline Scripted Fake Model  
-**Timestamp:** 2026-10-27 16:29:25 UTC  
+**Timestamp:** 2026-10-27 16:40:23 UTC  
 **Fixed Prompt Overhead:** ~2850 tokens (all 29 tool schemas + system instructions declared on every call)
 
 ---
