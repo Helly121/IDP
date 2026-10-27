@@ -89,6 +89,9 @@ class ScriptedFakeChatSession:
         else:
             return self._handle_scenario_c(prompt_tokens)
 
+    async def send_message_async(self, content: Any) -> protos.GenerateContentResponse:
+        return self.send_message(content)
+
     def _handle_scenario_a(self, prompt_tokens: int) -> protos.GenerateContentResponse:
         if self.turn == 1:
             # First tool call: create Terraform config

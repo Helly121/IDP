@@ -45,14 +45,107 @@ def _get_gemini_model():
             logger.info("Registering %d tools with Gemini", len(tool_declarations))
 
             _gemini_model = genai.GenerativeModel(
-                "gemini-flash-latest",
+                settings.GEMINI_MODEL,
                 tools=[{"function_declarations": tool_declarations}] if tool_declarations else None,
                 system_instruction=_build_system_prompt(),
             )
-            logger.info("Gemini agent model initialized with function calling")
+            logger.info("Gemini agent model initialized with function calling (model: %s)", settings.GEMINI_MODEL)
         except Exception as e:
             logger.warning("Failed to initialize Gemini agent: %s", e)
     return _gemini_model
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """Check if exception represents an HTTP 429 or quota limit exhaustion."""
+    try:
+        from google.api_core import exceptions
+        if isinstance(exc, exceptions.ResourceExhausted):
+            return True
+    except ImportError:
+        pass
+    if getattr(exc, "status_code", None) == 429 or getattr(exc, "code", None) == 429:
+        return True
+    exc_str = str(exc).lower()
+    return "429" in exc_str or "resourceexhausted" in exc_str or "quota" in exc_str or "rate limit" in exc_str
+
+
+def _extract_retry_delay(exc: Exception, default_delay: float) -> float:
+    """Extract retry delay seconds from exception message or metadata if present."""
+    import re
+    msg = str(exc)
+    match = re.search(r"retry[-_\s]?(?:in|after)?[:\s]+([0-9.]+)\s*s?", msg, re.IGNORECASE)
+    if match:
+        try:
+            return float(match.group(1))
+        except (ValueError, TypeError):
+            pass
+    metadata = getattr(exc, "metadata", None)
+    if metadata:
+        for k, v in metadata:
+            if "retry" in str(k).lower():
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    pass
+    return default_delay
+
+
+async def _send_chat_message_with_retry(
+    chat: Any,
+    content: Any,
+    max_retries: int = 2,
+) -> AsyncGenerator[tuple[str | None, Any | None], None]:
+    """
+    Send message asynchronously using SDK async method (chat.send_message_async),
+    with thread pool fallback for synchronous chats.
+
+    Handles quota errors (HTTP 429 / ResourceExhausted) by retrying at most 2 times
+    with exponential backoff plus jitter, honoring any specified retry delay.
+    Yields (sse_event_string, None) during retry waits so callers can stream THINKING events live.
+    Yields (None, response) when successful.
+    """
+    import asyncio
+    import inspect
+    import random
+
+    retries = 0
+    while True:
+        try:
+            if hasattr(chat, "send_message_async"):
+                resp = await chat.send_message_async(content)
+            elif hasattr(chat, "send_message"):
+                if inspect.iscoroutinefunction(chat.send_message):
+                    resp = await chat.send_message(content)
+                else:
+                    resp = await asyncio.to_thread(chat.send_message, content)
+            else:
+                raise AttributeError("Chat session has no send_message or send_message_async method")
+            yield (None, resp)
+            return
+        except Exception as e:
+            if _is_rate_limit_error(e) and retries < max_retries:
+                retries += 1
+                base_delay = 2.0 ** retries
+                jitter = random.uniform(0.1, 1.0)
+                delay = _extract_retry_delay(e, base_delay + jitter)
+                logger.warning(
+                    "LLM rate limited (retry %d/%d). Retrying in %.1f s: %s",
+                    retries,
+                    max_retries,
+                    delay,
+                    e,
+                )
+                yield (
+                    AgentEvent(
+                        type=AgentEventType.THINKING,
+                        data={"message": f"Rate limited, retrying in {delay:.1f} s"},
+                        timestamp=datetime.now(timezone.utc),
+                    ).to_sse(),
+                    None,
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
 
 def _build_system_prompt() -> str:
     """Build the system prompt for the DevOps AI agent."""
@@ -120,11 +213,25 @@ async def run_agent_stream(
     try:
         # Start a chat session for multi-turn tool calling
         chat = model.start_chat(history=[])
-        response = chat.send_message("\n".join(context_parts))
+        response = None
+        async for sse_event, resp in _send_chat_message_with_retry(chat, "\n".join(context_parts)):
+            if sse_event:
+                yield sse_event
+            if resp is not None:
+                response = resp
+
+        if response is None:
+            yield AgentEvent(
+                type=AgentEventType.ERROR,
+                data={"message": "No response received from AI model"},
+                timestamp=now(),
+            ).to_sse()
+            return
 
         # Agentic loop: keep processing until we get a text response
-        max_iterations = 10
+        max_iterations = settings.AGENT_MAX_ITERATIONS
         iteration = 0
+        seen_tool_calls: set[str] = set()
 
         # Token usage tracking
         total_prompt_tokens = 0
@@ -219,6 +326,35 @@ async def run_agent_stream(
                     timestamp=now(),
                 ).to_sse()
 
+                # Duplicate-call guard: check canonical JSON args
+                canonical_args = json.dumps(tool_params, sort_keys=True, separators=(",", ":"))
+                call_signature = f"{tool_name}:{canonical_args}"
+
+                if call_signature in seen_tool_calls:
+                    logger.info("Duplicate tool call suppressed: %s", call_signature)
+                    dup_message = "already retrieved above"
+                    yield AgentEvent(
+                        type=AgentEventType.TOOL_RESULT,
+                        data={
+                            "tool_name": tool_name,
+                            "success": True,
+                            "result": {"message": dup_message},
+                        },
+                        timestamp=now(),
+                    ).to_sse()
+
+                    function_responses.append(
+                        protos.Part(
+                            function_response=protos.FunctionResponse(
+                                name=tool_name,
+                                response={"result": dup_message},
+                            )
+                        )
+                    )
+                    continue
+
+                seen_tool_calls.add(call_signature)
+
                 # Check if this is a mutating tool
                 if registry.is_mutating(tool_name):
                     # Create a pending action and yield approval_required
@@ -285,8 +421,21 @@ async def run_agent_stream(
                         )
                     )
 
-            # Send all function responses back to Gemini for the next iteration
-            response = chat.send_message(function_responses)
+            # Send all function responses back to Gemini asynchronously for the next iteration
+            response = None
+            async for sse_event, resp in _send_chat_message_with_retry(chat, function_responses):
+                if sse_event:
+                    yield sse_event
+                if resp is not None:
+                    response = resp
+
+            if response is None:
+                yield AgentEvent(
+                    type=AgentEventType.ERROR,
+                    data={"message": "No response received from AI model"},
+                    timestamp=now(),
+                ).to_sse()
+                return
 
         # If we hit max iterations, yield a warning
         yield AgentEvent(
@@ -306,6 +455,15 @@ async def run_agent_stream(
         ).to_sse()
 
     except Exception as e:
+        if _is_rate_limit_error(e):
+            logger.error("AI quota exhausted: %s", e)
+            yield AgentEvent(
+                type=AgentEventType.ERROR,
+                data={"message": "AI quota was reached. Please wait a moment or try again later."},
+                timestamp=now(),
+            ).to_sse()
+            return
+
         logger.exception("Agent loop error")
         yield AgentEvent(
             type=AgentEventType.ERROR,

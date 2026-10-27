@@ -34,6 +34,8 @@ class Settings(BaseSettings):
 
     # ── Google Gemini API ──────────────────────────────────
     GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-flash-latest"
+    AGENT_MAX_ITERATIONS: int = 6
 
     # ── GitHub MCP Server ──────────────────────────────────
     GITHUB_TOKEN: str = ""
