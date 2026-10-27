@@ -94,19 +94,19 @@ class WorkflowMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="workflow_list",
-                description="List all GitHub Actions workflow files under .github/workflows/.",
+                description="List workflow files under .github/workflows/.",
                 parameters=[],
                 is_mutating=False,
                 category=ToolCategory.CICD,
             ),
             ToolDefinition(
                 name="workflow_get",
-                description="Read the contents of a GitHub Actions workflow YAML file.",
+                description="Read a GitHub Actions workflow YAML file.",
                 parameters=[
                     ToolParameter(
                         name="workflow_name",
                         type="string",
-                        description="Workflow file name (e.g. 'ci-cd.yml' or 'terraform.yml')",
+                        description="Workflow file name (e.g. 'ci-cd.yml')",
                         required=True,
                     ),
                 ],
@@ -115,11 +115,7 @@ class WorkflowMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="workflow_write",
-                description=(
-                    "Create or update a GitHub Actions workflow file under .github/workflows/. "
-                    "Validates YAML syntax before saving. "
-                    "This is a MUTATING action and requires Human-in-the-Loop (HITL) approval before execution."
-                ),
+                description="Create or update workflow file under .github/workflows/. Validates YAML.",
                 parameters=[
                     ToolParameter(
                         name="workflow_name",
@@ -130,7 +126,7 @@ class WorkflowMCPServer(MCPServerBase):
                     ToolParameter(
                         name="content",
                         type="string",
-                        description="Complete YAML content of the GitHub Actions workflow",
+                        description="Complete YAML content",
                         required=True,
                     ),
                 ],
@@ -139,10 +135,7 @@ class WorkflowMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="workflow_validate",
-                description=(
-                    "Validate the YAML syntax and required GitHub Actions structure "
-                    "(e.g. name, on, jobs) for a workflow definition."
-                ),
+                description="Validate YAML syntax and structure for a workflow.",
                 parameters=[
                     ToolParameter(
                         name="content",

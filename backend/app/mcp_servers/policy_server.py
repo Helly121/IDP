@@ -1,4 +1,4 @@
-﻿"""
+"""
 Policy & Cost MCP Server — RBAC validation, cost estimation, and user role queries.
 
 Interfaces with the existing User, Project, and Deployment database tables
@@ -52,48 +52,41 @@ class PolicyMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="policy_check_quota",
-                description=(
-                    "Validate whether a user is allowed to provision the requested resources. "
-                    "Checks role-based limits on replicas and project counts. "
-                    "Returns allowed=true/false with a reason."
-                ),
+                description="Validate if requested replicas and db_type comply with user quota.",
                 parameters=[
-                    ToolParameter(name="user_id", type="string", description="UUID of the requesting user"),
-                    ToolParameter(name="requested_replicas", type="integer", description="Number of replicas requested"),
-                    ToolParameter(name="db_type", type="string", description="Database type: postgres, mongodb, redis, none", required=False),
+                    ToolParameter(name="user_id", type="string", description="User UUID"),
+                    ToolParameter(name="requested_replicas", type="integer", description="Requested replica count"),
+                    ToolParameter(name="db_type", type="string", description="postgres, mongodb, redis, or none", required=False),
                 ],
                 is_mutating=False,
                 category=ToolCategory.POLICY,
             ),
             ToolDefinition(
                 name="policy_estimate_cost",
-                description="Estimate the monthly cost (USD) for a given resource configuration.",
+                description="Estimate monthly cost (USD) for replicas and db_type.",
                 parameters=[
-                    ToolParameter(name="replicas", type="integer", description="Number of pod replicas"),
-                    ToolParameter(name="db_type", type="string", description="Database type: postgres, mongodb, redis, none"),
+                    ToolParameter(name="replicas", type="integer", description="Pod replicas"),
+                    ToolParameter(name="db_type", type="string", description="postgres, mongodb, redis, or none"),
                 ],
                 is_mutating=False,
                 category=ToolCategory.POLICY,
             ),
             ToolDefinition(
                 name="policy_get_user_role",
-                description="Get a user's role, current project count, and total resource usage across all projects.",
+                description="Get user role, project count, and resource usage.",
                 parameters=[
-                    ToolParameter(name="user_id", type="string", description="UUID of the user"),
+                    ToolParameter(name="user_id", type="string", description="User UUID"),
                 ],
                 is_mutating=False,
                 category=ToolCategory.POLICY,
             ),
             ToolDefinition(
                 name="policy_approve_escalation",
-                description=(
-                    "Record that a guide or admin has approved an over-quota resource request. "
-                    "This allows the student's request to proceed."
-                ),
+                description="Approve over-quota request for student. Guide/admin only.",
                 parameters=[
-                    ToolParameter(name="user_id", type="string", description="UUID of the student whose request is being approved"),
-                    ToolParameter(name="approver_id", type="string", description="UUID of the guide/admin approving"),
-                    ToolParameter(name="requested_replicas", type="integer", description="Number of replicas being approved"),
+                    ToolParameter(name="user_id", type="string", description="Student UUID"),
+                    ToolParameter(name="approver_id", type="string", description="Guide/admin UUID"),
+                    ToolParameter(name="requested_replicas", type="integer", description="Approved replica count"),
                 ],
                 is_mutating=True,
                 category=ToolCategory.POLICY,

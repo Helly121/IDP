@@ -31,33 +31,51 @@ from app.services.context_budget import (
     compact_chat_history,
 )
 
+from app.mcp_servers.base import ToolCategory
+from app.services.tool_router import select_tool_categories
+
 logger = logging.getLogger(__name__)
 
-# Gemini model and function-calling setup
-_gemini_model = None
+# Cache one GenerativeModel per frozenset of ToolCategory
+_model_cache: dict[frozenset[ToolCategory], Any] = {}
 
-def _get_gemini_model():
-    """Lazily initialise the Gemini model with MCP tool declarations."""
-    global _gemini_model
-    if _gemini_model is None and settings.GEMINI_API_KEY:
+
+def _get_gemini_model(categories: frozenset[ToolCategory] | None = None) -> Any:
+    """
+    Build and cache a Gemini GenerativeModel configured specifically
+    with the tool declarations for the given categories.
+    """
+    global _model_cache
+    if not settings.GEMINI_API_KEY:
+        return None
+
+    cat_key = categories if categories is not None else frozenset(ToolCategory)
+
+    if cat_key not in _model_cache:
         try:
             import google.generativeai as genai
 
             genai.configure(api_key=settings.GEMINI_API_KEY)
 
-            # Build tool declarations from the MCP registry
-            tool_declarations = registry.get_gemini_declarations()
-            logger.info("Registering %d tools with Gemini", len(tool_declarations))
+            # Build tool declarations filtered by selected categories
+            tool_declarations = registry.get_gemini_declarations(set(cat_key))
+            logger.info(
+                "Initializing Gemini model for categories %s with %d tools (model: %s)",
+                [c.value for c in cat_key],
+                len(tool_declarations),
+                settings.GEMINI_MODEL,
+            )
 
-            _gemini_model = genai.GenerativeModel(
+            _model_cache[cat_key] = genai.GenerativeModel(
                 settings.GEMINI_MODEL,
                 tools=[{"function_declarations": tool_declarations}] if tool_declarations else None,
                 system_instruction=_build_system_prompt(),
             )
-            logger.info("Gemini agent model initialized with function calling (model: %s)", settings.GEMINI_MODEL)
         except Exception as e:
-            logger.warning("Failed to initialize Gemini agent: %s", e)
-    return _gemini_model
+            logger.warning("Failed to initialize Gemini agent model: %s", e)
+            return None
+
+    return _model_cache[cat_key]
 
 
 def _is_rate_limit_error(exc: Exception) -> bool:
@@ -153,28 +171,15 @@ async def _send_chat_message_with_retry(
                 raise
 
 def _build_system_prompt() -> str:
-    """Build the system prompt for the DevOps AI agent."""
-    return """You are an expert DevOps AI agent embedded in an Academic Internal Developer Platform (IDP).
-Your role is to help students, guides, and admins with:
-- Provisioning and managing Terraform Infrastructure-as-Code (IaC) under iac/
-- Generating and managing GitHub Actions CI/CD pipelines under .github/workflows/
-- Generating Dockerfiles, Kubernetes manifests, and managing cluster resources
-- Diagnosing deployment failures (CrashLoopBackOff, ImagePullBackOff, OOMKilled)
-- Managing GitHub repositories and ArgoCD GitOps synchronisation
-- Enforcing institutional RBAC policies (student quotas vs faculty approvals)
+    """Concise system prompt for the Academic IDP DevOps agent."""
+    return """You are the DevOps AI agent for the Academic Internal Developer Platform (IDP).
+Assist users with Terraform (under iac/), GitHub Actions (under .github/workflows/), Kubernetes/ArgoCD deployments, diagnostics, and RBAC/cost policies.
 
-You have access to MCP tools for:
-- Terraform: inspect files, create/update configurations, format (terraform_fmt), initialize (terraform_init), validate (terraform_validate), and generate safe speculative plans (terraform_plan)
-- CI/CD Workflows: list, inspect, create/update (workflow_write), and validate (workflow_validate) GitHub Actions workflows
-- GitHub: create repositories, list repositories, push and read files
-- Kubernetes & ArgoCD: inspect and manage cluster workloads and GitOps sync
-- Policy Engine: evaluate RBAC rules and calculate cost estimations
-
-Important Operational & Security Rules:
-1. Mutating actions (such as terraform_write_file, workflow_write, github_push_file, github_create_repo) automatically trigger Human-in-the-Loop (HITL) approval gates. Inform the user that the action is queued for review.
-2. Terraform apply is NOT an MCP capability. Infrastructure deployments are executed exclusively through protected GitHub Actions workflows after code is committed and approved.
-3. Keep all Terraform operations strictly scoped to iac/ and workflow operations strictly scoped to .github/workflows/.
-4. Always explain your plan, execute appropriate validation/formatting/planning tools, and be concise, helpful, and security-conscious. Never expose secrets or credentials."""
+Key Rules:
+1. Mutating tools trigger HITL approval. Inform the user when actions are queued.
+2. Terraform apply is NOT an MCP capability; deployments occur via approved CI/CD.
+3. Keep Terraform scoped to iac/ and workflows to .github/workflows/.
+4. Be concise, validate configurations, and never expose secrets or credentials."""
 
 async def run_agent_stream(
     message: str,
@@ -199,8 +204,12 @@ async def run_agent_stream(
         timestamp=now(),
     ).to_sse()
 
+    # Route minimal tool categories based on message intent
+    selected_categories = select_tool_categories(message, target_project=project_id)
+    cat_key = frozenset(selected_categories)
+
     if model is None:
-        model = _get_gemini_model()
+        model = _get_gemini_model(cat_key)
     if model is None:
         yield AgentEvent(
             type=AgentEventType.ERROR,

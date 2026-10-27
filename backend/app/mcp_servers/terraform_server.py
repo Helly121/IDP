@@ -142,14 +142,12 @@ class TerraformMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="terraform_list_files",
-                description=(
-                    "List all Terraform configuration files and subdirectories within the iac/ directory."
-                ),
+                description="List files and directories within iac/.",
                 parameters=[
                     ToolParameter(
                         name="subpath",
                         type="string",
-                        description="Optional subdirectory within iac/ (e.g. 'environments/dev' or 'modules/k8s-namespace')",
+                        description="Optional subdirectory within iac/ (e.g. 'environments/dev')",
                         required=False,
                         default="",
                     ),
@@ -159,24 +157,24 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_get_file",
-                description="Read the contents of a Terraform file within the iac/ workspace. Supports line range pagination (default first 200 lines).",
+                description="Read file in iac/ with optional start_line/end_line pagination.",
                 parameters=[
                     ToolParameter(
                         name="file_path",
                         type="string",
-                        description="Relative path to the file within iac/ (e.g. 'environments/dev/main.tf')",
+                        description="Relative path within iac/ (e.g. 'environments/dev/main.tf')",
                         required=True,
                     ),
                     ToolParameter(
                         name="start_line",
                         type="integer",
-                        description="Optional starting line number (1-indexed, default 1)",
+                        description="Optional starting line number (1-indexed)",
                         required=False,
                     ),
                     ToolParameter(
                         name="end_line",
                         type="integer",
-                        description="Optional ending line number (1-indexed, default min(200, total_lines))",
+                        description="Optional ending line number (1-indexed)",
                         required=False,
                     ),
                 ],
@@ -185,10 +183,7 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_write_file",
-                description=(
-                    "Create or update a Terraform file (*.tf, *.tfvars, *.tpl) within the iac/ workspace. "
-                    "This is a MUTATING action and requires Human-in-the-Loop (HITL) approval before execution."
-                ),
+                description="Create or update file in iac/.",
                 parameters=[
                     ToolParameter(
                         name="file_path",
@@ -199,7 +194,7 @@ class TerraformMCPServer(MCPServerBase):
                     ToolParameter(
                         name="content",
                         type="string",
-                        description="Complete content to write to the Terraform file",
+                        description="Complete file content to write",
                         required=True,
                     ),
                 ],
@@ -208,22 +203,19 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_fmt",
-                description=(
-                    "Format Terraform files in the iac/ workspace using the real Terraform CLI. "
-                    "Supports check mode to verify formatting without modifying files."
-                ),
+                description="Format Terraform files in iac/, or check formatting.",
                 parameters=[
                     ToolParameter(
                         name="path",
                         type="string",
-                        description="Target directory or file path within iac/ (default: root iac directory)",
+                        description="Target directory or file path within iac/",
                         required=False,
                         default="",
                     ),
                     ToolParameter(
                         name="check",
                         type="boolean",
-                        description="If true, only checks formatting and reports unformatted files without modifying them",
+                        description="If true, only checks formatting without modifying files",
                         required=False,
                         default=False,
                     ),
@@ -233,10 +225,7 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_init",
-                description=(
-                    "Initialize a Terraform configuration directory using 'terraform init -backend=false'. "
-                    "Downloads provider plugins without requiring remote backend credentials."
-                ),
+                description="Run 'terraform init -backend=false' on an iac/ directory.",
                 parameters=[
                     ToolParameter(
                         name="directory",
@@ -251,10 +240,7 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_validate",
-                description=(
-                    "Validate the syntax and configuration of a Terraform directory using 'terraform validate'. "
-                    "Must be run on an initialized directory."
-                ),
+                description="Run 'terraform validate' on an initialized directory.",
                 parameters=[
                     ToolParameter(
                         name="directory",
@@ -269,10 +255,7 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_plan",
-                description=(
-                    "Generate a safe speculative Terraform execution plan using 'terraform plan -no-color'. "
-                    "Inspects proposed infrastructure changes without applying them."
-                ),
+                description="Run speculative 'terraform plan -no-color' to preview changes.",
                 parameters=[
                     ToolParameter(
                         name="directory",
@@ -284,7 +267,7 @@ class TerraformMCPServer(MCPServerBase):
                     ToolParameter(
                         name="var_file",
                         type="string",
-                        description="Optional var-file path relative to the directory (e.g. 'terraform.tfvars')",
+                        description="Optional var-file path relative to directory",
                         required=False,
                     ),
                 ],
