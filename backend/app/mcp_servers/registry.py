@@ -16,7 +16,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.mcp_servers.base import MCPServerBase, ToolDefinition, ToolResult
+from app.mcp_servers.base import MCPServerBase, ToolCategory, ToolDefinition, ToolResult
 from app.mcp_servers.github_server import GitHubMCPServer
 from app.mcp_servers.kubernetes_server import KubernetesMCPServer
 from app.mcp_servers.argocd_server import ArgoCDMCPServer
@@ -104,9 +104,12 @@ class ToolRegistry:
     # Public API
     # ------------------------------------------------------------------
 
-    def get_all_tools(self) -> list[ToolDefinition]:
-        """Return all registered tool definitions."""
-        return [td for _, td in self._tool_map.values()]
+    def get_all_tools(self, categories: set[ToolCategory] | None = None) -> list[ToolDefinition]:
+        """Return all registered tool definitions, optionally filtered by categories."""
+        tools = [td for _, td in self._tool_map.values()]
+        if categories is not None:
+            tools = [td for td in tools if td.category in categories]
+        return tools
 
     def get_tool(self, name: str) -> ToolDefinition | None:
         """Look up a tool definition by name."""
@@ -118,22 +121,35 @@ class ToolRegistry:
         tool = self.get_tool(tool_name)
         return tool.is_mutating if tool else False
 
-    async def dispatch(self, tool_name: str, params: dict) -> ToolResult:
-        """Execute a tool by name, routing to the correct MCP server."""
+    async def dispatch(self, tool_name: str, params: dict, ctx: dict | None = None) -> ToolResult:
+        """Execute a tool by name, routing to the correct MCP server with optional context."""
         entry = self._tool_map.get(tool_name)
         if entry is None:
             return ToolResult(success=False, error=f"Tool '{tool_name}' not found in registry")
 
         server, tool_def = entry
         logger.info("Dispatching tool '%s' (mutating=%s)", tool_name, tool_def.is_mutating)
-        return await server.execute_tool(tool_name, params)
 
-    def get_gemini_declarations(self) -> list[dict]:
+        # Backward-compatible invocation: pass ctx if accepted, fallback without it
+        import inspect
+        try:
+            sig = inspect.signature(server.execute_tool)
+            if "ctx" in sig.parameters or len(sig.parameters) >= 3:
+                return await server.execute_tool(tool_name, params, ctx=ctx)
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            return await server.execute_tool(tool_name, params, ctx=ctx)
+        except TypeError:
+            return await server.execute_tool(tool_name, params)
+
+    def get_gemini_declarations(self, categories: set[ToolCategory] | None = None) -> list[dict]:
         """
-        Return all tool definitions formatted as Gemini function declarations.
-        Ready to pass to GenerativeModel(tools=[...]).
+        Return tool definitions formatted as Gemini function declarations,
+        optionally filtered to the specified set of categories.
         """
-        return [td.to_gemini_declaration() for td in self.get_all_tools()]
+        return [td.to_gemini_declaration() for td in self.get_all_tools(categories)]
 
     def get_server_status(self) -> dict[str, Any]:
         """Return status info for all registered servers (for health checks)."""

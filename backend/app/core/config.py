@@ -34,6 +34,10 @@ class Settings(BaseSettings):
 
     # ── Google Gemini API ──────────────────────────────────
     GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-flash-latest"
+    AGENT_MAX_ITERATIONS: int = 6
+    TOOL_RESULT_MAX_CHARS: int = 4000
+    UI_RESULT_MAX_CHARS: int = 20000
 
     # ── GitHub MCP Server ──────────────────────────────────
     GITHUB_TOKEN: str = ""
@@ -52,6 +56,11 @@ class Settings(BaseSettings):
     # ── IaC & CI/CD MCP Paths ──────────────────────────────
     IAC_DIR: str = "/app/iac"
     WORKFLOWS_DIR: str = "/app/.github/workflows"
+
+    # ── Staging Workspace ──────────────────────────────────
+    STAGING_ROOT: str = "./staging"
+    STAGING_TTL_MINUTES: int = 60
+    TF_PLUGIN_CACHE_DIR: str = ""
 
     # ── App ──────────────────────────────────────────────
     APP_NAME: str = "Academic IDP"

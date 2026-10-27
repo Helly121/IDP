@@ -1,4 +1,4 @@
-﻿"""
+"""
 ArgoCD MCP Server — Stub/Mock mode for Phase 1.5.
 
 When ARGOCD_URL and ARGOCD_TOKEN are provided, calls the real ArgoCD API.
@@ -45,7 +45,7 @@ class ArgoCDMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="argocd_get_app_status",
-                description="Get the sync and health status of an ArgoCD application.",
+                description="Get sync and health status of an ArgoCD application.",
                 parameters=[
                     ToolParameter(name="app_name", type="string", description="ArgoCD application name"),
                 ],
@@ -54,14 +54,14 @@ class ArgoCDMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="argocd_list_apps",
-                description="List all ArgoCD applications with their sync and health status.",
+                description="List ArgoCD applications with sync and health status.",
                 parameters=[],
                 is_mutating=False,
                 category=ToolCategory.ARGOCD,
             ),
             ToolDefinition(
                 name="argocd_sync_app",
-                description="Trigger a manual sync for an ArgoCD application. This reconciles the live cluster state with the desired state in Git.",
+                description="Trigger manual sync for an ArgoCD application.",
                 parameters=[
                     ToolParameter(name="app_name", type="string", description="ArgoCD application name"),
                 ],
@@ -70,7 +70,7 @@ class ArgoCDMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="argocd_get_sync_diff",
-                description="Preview what would change on the next sync for an ArgoCD application.",
+                description="Preview pending sync diff for an ArgoCD application.",
                 parameters=[
                     ToolParameter(name="app_name", type="string", description="ArgoCD application name"),
                 ],

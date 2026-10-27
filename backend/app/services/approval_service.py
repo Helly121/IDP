@@ -1,4 +1,4 @@
-﻿"""
+"""
 Approval workflow service — CRUD operations for PendingAction records
 and execution of approved mutating tool calls.
 """
@@ -93,9 +93,22 @@ async def approve_action(
     action.reviewed_at = datetime.now(timezone.utc)
     await db.flush()
 
+    # Inject server-side approver_id for policy escalation approval
+    if action.tool_name == "policy_approve_escalation":
+        action.tool_params["approver_id"] = str(reviewer_id)
+        if "user_id" not in action.tool_params and action.user_id:
+            action.tool_params["user_id"] = str(action.user_id)
+
+    # Build execution context
+    ctx = {
+        "user_id": str(action.user_id) if action.user_id else None,
+        "session_id": str(action.session_id) if action.session_id else None,
+        "reviewer_id": str(reviewer_id),
+    }
+
     # Execute the tool
     try:
-        tool_result = await registry.dispatch(action.tool_name, action.tool_params)
+        tool_result = await registry.dispatch(action.tool_name, action.tool_params, ctx=ctx)
         action.result = tool_result.to_dict()
         await db.flush()
         logger.info("Approved action %s executed: success=%s", action_id, tool_result.success)
@@ -103,6 +116,11 @@ async def approve_action(
         action.result = {"success": False, "error": str(e)}
         await db.flush()
         logger.error("Approved action %s execution failed: %s", action_id, e)
+
+    # Clean up staging workspace for this session upon approval
+    from app.services.staging_service import cleanup_staging
+    if action.session_id:
+        cleanup_staging(action.session_id)
 
     return action
 
@@ -113,7 +131,7 @@ async def reject_action(
     reviewer_id: uuid.UUID,
     reason: str | None = None,
 ) -> PendingAction | None:
-    """Reject a pending action with an optional reason."""
+    """Reject a pending action with an optional reason and clean up staging workspace."""
     action = await db.get(PendingAction, action_id)
     if action is None:
         return None
@@ -133,4 +151,11 @@ async def reject_action(
     await db.flush()
 
     logger.info("Rejected action %s: %s", action_id, reason or "no reason given")
+
+    # Clean up staging workspace for this session upon rejection
+    from app.services.staging_service import cleanup_staging
+    if action.session_id:
+        cleanup_staging(action.session_id)
+
     return action
+

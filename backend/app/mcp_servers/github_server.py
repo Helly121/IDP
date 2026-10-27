@@ -1,4 +1,4 @@
-﻿"""
+"""
 GitHub MCP Server — Tools for repository and file management via GitHub REST API.
 
 Configured via GITHUB_TOKEN (PAT) and GITHUB_ORG environment variables.
@@ -50,27 +50,21 @@ class GitHubMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="github_create_repo",
-                description=(
-                    "Create a new GitHub repository under the configured organisation. "
-                    "Returns the repo URL and clone URL."
-                ),
+                description="Create a repository under the configured organization.",
                 parameters=[
                     ToolParameter(name="repo_name", type="string", description="Repository name (e.g. my-service)"),
-                    ToolParameter(name="description", type="string", description="Short repository description", required=False),
-                    ToolParameter(name="private", type="boolean", description="Whether the repo should be private", required=False),
+                    ToolParameter(name="description", type="string", description="Optional repository description", required=False),
+                    ToolParameter(name="private", type="boolean", description="Whether repo is private", required=False),
                 ],
                 is_mutating=True,
                 category=ToolCategory.GITHUB,
             ),
             ToolDefinition(
                 name="github_push_file",
-                description=(
-                    "Create or update a single file in a GitHub repository. "
-                    "Use this to commit Dockerfiles, Kubernetes manifests, CI configs, etc."
-                ),
+                description="Commit a single file to a GitHub repository.",
                 parameters=[
                     ToolParameter(name="repo_name", type="string", description="Repository name"),
-                    ToolParameter(name="file_path", type="string", description="Path within the repo (e.g. k8s/deployment.yaml)"),
+                    ToolParameter(name="file_path", type="string", description="Path within repo (e.g. k8s/deploy.yaml)"),
                     ToolParameter(name="content", type="string", description="File content to commit"),
                     ToolParameter(name="commit_message", type="string", description="Git commit message"),
                     ToolParameter(name="branch", type="string", description="Target branch", required=False),
@@ -80,7 +74,7 @@ class GitHubMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="github_list_repos",
-                description="List repositories under the configured GitHub organisation.",
+                description="List repositories under the organization.",
                 parameters=[
                     ToolParameter(name="per_page", type="integer", description="Results per page (max 100)", required=False),
                 ],
@@ -89,11 +83,11 @@ class GitHubMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="github_get_file_content",
-                description="Read the contents of a file from a GitHub repository.",
+                description="Read file contents from a GitHub repository.",
                 parameters=[
                     ToolParameter(name="repo_name", type="string", description="Repository name"),
                     ToolParameter(name="file_path", type="string", description="Path within the repo"),
-                    ToolParameter(name="branch", type="string", description="Branch to read from", required=False),
+                    ToolParameter(name="branch", type="string", description="Branch name", required=False),
                 ],
                 is_mutating=False,
                 category=ToolCategory.GITHUB,

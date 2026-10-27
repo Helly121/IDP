@@ -112,23 +112,35 @@ class TerraformMCPServer(MCPServerBase):
     # Security / Sandboxing
     # ------------------------------------------------------------------
 
-    def _resolve_safe_path(self, relative_path: str = "") -> Path:
+    def _resolve_safe_path(self, relative_path: str = "", root: Path | None = None) -> Path:
         """
-        Safely resolve a path within the allowed IaC root.
+        Safely resolve a path within the allowed IaC root (or staging root).
         Rejects path traversal (e.g. ../), absolute paths outside root,
-        or any target outside self._iac_root.
+        or any target outside base_root.
         """
+        base_root = (root or self._iac_root).resolve()
         clean_rel = relative_path.strip().lstrip("/\\")
-        target = (self._iac_root / clean_rel).resolve()
+        target = (base_root / clean_rel).resolve()
 
         try:
-            target.relative_to(self._iac_root)
+            target.relative_to(base_root)
         except ValueError:
             raise PermissionError(
-                f"Access denied: Path '{relative_path}' escapes IaC workspace '{self._iac_root}'"
+                f"Access denied: Path '{relative_path}' escapes IaC workspace '{base_root}'"
             )
 
         return target
+
+    def _get_active_root(self, ctx: dict | None = None) -> Path:
+        """Return the session staging iac root if staged files exist, else the base iac root."""
+        if ctx and ctx.get("session_id"):
+            from app.services.staging_service import has_staged_terraform, get_staged_iac_root
+            sid = ctx["session_id"]
+            if has_staged_terraform(sid):
+                staged = get_staged_iac_root(sid)
+                if staged:
+                    return staged
+        return self._iac_root
 
     # ------------------------------------------------------------------
     # MCPServerBase interface
@@ -144,14 +156,12 @@ class TerraformMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="terraform_list_files",
-                description=(
-                    "List all Terraform configuration files and subdirectories within the iac/ directory."
-                ),
+                description="List files and directories within iac/.",
                 parameters=[
                     ToolParameter(
                         name="subpath",
                         type="string",
-                        description="Optional subdirectory within iac/ (e.g. 'environments/dev' or 'modules/k8s-namespace')",
+                        description="Optional subdirectory within iac/ (e.g. 'environments/dev')",
                         required=False,
                         default="",
                     ),
@@ -161,13 +171,25 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_get_file",
-                description="Read the contents of a Terraform file within the iac/ workspace.",
+                description="Read file in iac/ with optional start_line/end_line pagination.",
                 parameters=[
                     ToolParameter(
                         name="file_path",
                         type="string",
-                        description="Relative path to the file within iac/ (e.g. 'environments/dev/main.tf')",
+                        description="Relative path within iac/ (e.g. 'environments/dev/main.tf')",
                         required=True,
+                    ),
+                    ToolParameter(
+                        name="start_line",
+                        type="integer",
+                        description="Optional starting line number (1-indexed)",
+                        required=False,
+                    ),
+                    ToolParameter(
+                        name="end_line",
+                        type="integer",
+                        description="Optional ending line number (1-indexed)",
+                        required=False,
                     ),
                 ],
                 is_mutating=False,
@@ -175,10 +197,7 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_write_file",
-                description=(
-                    "Create or update a Terraform file (*.tf, *.tfvars, *.tpl) within the iac/ workspace. "
-                    "This is a MUTATING action and requires Human-in-the-Loop (HITL) approval before execution."
-                ),
+                description="Create or update file in iac/.",
                 parameters=[
                     ToolParameter(
                         name="file_path",
@@ -189,7 +208,7 @@ class TerraformMCPServer(MCPServerBase):
                     ToolParameter(
                         name="content",
                         type="string",
-                        description="Complete content to write to the Terraform file",
+                        description="Complete file content to write",
                         required=True,
                     ),
                 ],
@@ -198,22 +217,19 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_fmt",
-                description=(
-                    "Format Terraform files in the iac/ workspace using the real Terraform CLI. "
-                    "Supports check mode to verify formatting without modifying files."
-                ),
+                description="Format Terraform files in iac/, or check formatting.",
                 parameters=[
                     ToolParameter(
                         name="path",
                         type="string",
-                        description="Target directory or file path within iac/ (default: root iac directory)",
+                        description="Target directory or file path within iac/",
                         required=False,
                         default="",
                     ),
                     ToolParameter(
                         name="check",
                         type="boolean",
-                        description="If true, only checks formatting and reports unformatted files without modifying them",
+                        description="If true, only checks formatting without modifying files",
                         required=False,
                         default=False,
                     ),
@@ -223,10 +239,7 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_init",
-                description=(
-                    "Initialize a Terraform configuration directory using 'terraform init -backend=false'. "
-                    "Downloads provider plugins without requiring remote backend credentials."
-                ),
+                description="Run 'terraform init -backend=false' on an iac/ directory.",
                 parameters=[
                     ToolParameter(
                         name="directory",
@@ -241,10 +254,7 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_validate",
-                description=(
-                    "Validate the syntax and configuration of a Terraform directory using 'terraform validate'. "
-                    "Must be run on an initialized directory."
-                ),
+                description="Run 'terraform validate' on an initialized directory.",
                 parameters=[
                     ToolParameter(
                         name="directory",
@@ -259,10 +269,7 @@ class TerraformMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="terraform_plan",
-                description=(
-                    "Generate a safe speculative Terraform execution plan using 'terraform plan -no-color'. "
-                    "Inspects proposed infrastructure changes without applying them."
-                ),
+                description="Run speculative 'terraform plan -no-color' to preview changes.",
                 parameters=[
                     ToolParameter(
                         name="directory",
@@ -274,8 +281,55 @@ class TerraformMCPServer(MCPServerBase):
                     ToolParameter(
                         name="var_file",
                         type="string",
-                        description="Optional var-file path relative to the directory (e.g. 'terraform.tfvars')",
+                        description="Optional var-file path relative to directory",
                         required=False,
+                    ),
+                ],
+                is_mutating=False,
+                category=ToolCategory.TERRAFORM,
+            ),
+            ToolDefinition(
+                name="terraform_patch_file",
+                description="Patch file in iac/ by replacing old_string with new_string. Fails if old_string is not found exactly once.",
+                parameters=[
+                    ToolParameter(
+                        name="file_path",
+                        type="string",
+                        description="Relative path within iac/ (e.g. 'environments/dev/main.tf')",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="old_string",
+                        type="string",
+                        description="Exact string to replace (must appear exactly once)",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="new_string",
+                        type="string",
+                        description="Replacement string",
+                        required=True,
+                    ),
+                ],
+                is_mutating=True,
+                category=ToolCategory.TERRAFORM,
+            ),
+            ToolDefinition(
+                name="render_template",
+                description="Render template in iac/templates/*.tpl with variables using Jinja2.",
+                parameters=[
+                    ToolParameter(
+                        name="template_name",
+                        type="string",
+                        description="Template file name under iac/templates/ (e.g. 'deployment.yaml.tpl')",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="variables",
+                        type="object",
+                        description="Dictionary of variables to render into the Jinja2 template",
+                        required=False,
+                        default={},
                     ),
                 ],
                 is_mutating=False,
@@ -283,15 +337,23 @@ class TerraformMCPServer(MCPServerBase):
             ),
         ]
 
-    async def execute_tool(self, tool_name: str, params: dict) -> ToolResult:
+    async def execute_tool(
+        self,
+        tool_name: str,
+        params: dict,
+        ctx: dict | None = None,
+    ) -> ToolResult:
+        effective_root = self._get_active_root(ctx)
         dispatch = {
-            "terraform_list_files": self._list_files,
-            "terraform_get_file": self._get_file,
+            "terraform_list_files": lambda p: self._list_files(p, root=effective_root),
+            "terraform_get_file": lambda p: self._get_file(p, root=effective_root),
             "terraform_write_file": self._write_file,
-            "terraform_fmt": self._fmt,
-            "terraform_init": self._init,
-            "terraform_validate": self._validate,
-            "terraform_plan": self._plan,
+            "terraform_patch_file": self._patch_file,
+            "render_template": lambda p: self._render_template(p, root=effective_root),
+            "terraform_fmt": lambda p: self._fmt(p, root=effective_root),
+            "terraform_init": lambda p: self._init(p, root=effective_root),
+            "terraform_validate": lambda p: self._validate(p, root=effective_root),
+            "terraform_plan": lambda p: self._plan(p, root=effective_root),
         }
         handler = dispatch.get(tool_name)
         if handler is None:
@@ -309,9 +371,10 @@ class TerraformMCPServer(MCPServerBase):
     # Tool Implementations
     # ------------------------------------------------------------------
 
-    async def _list_files(self, params: dict) -> ToolResult:
+    async def _list_files(self, params: dict, root: Path | None = None) -> ToolResult:
         subpath = params.get("subpath", "")
-        target_dir = self._resolve_safe_path(subpath)
+        base_root = (root or self._iac_root).resolve()
+        target_dir = self._resolve_safe_path(subpath, root=base_root)
 
         if not target_dir.exists():
             return ToolResult(success=False, error=f"Directory '{subpath}' does not exist in iac workspace")
@@ -320,14 +383,14 @@ class TerraformMCPServer(MCPServerBase):
             return ToolResult(success=False, error=f"Path '{subpath}' is not a directory")
 
         files_list = []
-        for root, dirs, files in os.walk(target_dir):
+        for r, dirs, files in os.walk(target_dir):
             # Skip hidden dirs like .terraform
             dirs[:] = [d for d in dirs if not d.startswith(".")]
             for file in files:
                 if file.startswith("."):
                     continue
-                full_p = Path(root) / file
-                rel_p = full_p.relative_to(self._iac_root).as_posix()
+                full_p = Path(r) / file
+                rel_p = full_p.relative_to(base_root).as_posix()
                 files_list.append({
                     "path": rel_p,
                     "size_bytes": full_p.stat().st_size,
@@ -343,9 +406,9 @@ class TerraformMCPServer(MCPServerBase):
             },
         )
 
-    async def _get_file(self, params: dict) -> ToolResult:
+    async def _get_file(self, params: dict, root: Path | None = None) -> ToolResult:
         file_path = params["file_path"]
-        target_file = self._resolve_safe_path(file_path)
+        target_file = self._resolve_safe_path(file_path, root=root)
 
         if not target_file.exists():
             return ToolResult(success=False, error=f"File '{file_path}' does not exist in iac workspace")
@@ -353,20 +416,36 @@ class TerraformMCPServer(MCPServerBase):
         if not target_file.is_file():
             return ToolResult(success=False, error=f"Path '{file_path}' is not a file")
 
-        content = target_file.read_text(encoding="utf-8", errors="replace")
+        raw_content = target_file.read_text(encoding="utf-8", errors="replace")
+        lines = raw_content.splitlines(keepends=True)
+        total_lines = len(lines)
+
+        start_line = params.get("start_line")
+        end_line = params.get("end_line")
+
+        start = max(1, int(start_line)) if start_line is not None else 1
+        end = min(total_lines, int(end_line)) if end_line is not None else min(200, total_lines)
+        if start > total_lines:
+            sliced_content = ""
+        else:
+            sliced_content = "".join(lines[start - 1 : end])
+
         return ToolResult(
             success=True,
             data={
                 "path": file_path,
-                "content": content,
-                "size_bytes": len(content),
+                "content": sliced_content,
+                "start_line": start,
+                "end_line": end,
+                "total_lines": total_lines,
+                "size_bytes": len(sliced_content),
             },
         )
 
     async def _write_file(self, params: dict) -> ToolResult:
         file_path = params["file_path"]
         content = params["content"]
-        target_file = self._resolve_safe_path(file_path)
+        target_file = self._resolve_safe_path(file_path, root=self._iac_root)
 
         # Ensure parent directory exists within safe root
         target_file.parent.mkdir(parents=True, exist_ok=True)
@@ -383,14 +462,121 @@ class TerraformMCPServer(MCPServerBase):
             },
         )
 
+    async def _patch_file(self, params: dict) -> ToolResult:
+        file_path = params.get("file_path", "")
+        old_string = params.get("old_string", "")
+        new_string = params.get("new_string", "")
+
+        target_file = self._resolve_safe_path(file_path, root=self._iac_root)
+        if not target_file.exists() or not target_file.is_file():
+            return ToolResult(
+                success=False,
+                error=f"Patch failed on approval: real file '{file_path}' not found.",
+            )
+
+        content = target_file.read_text(encoding="utf-8")
+        count = content.count(old_string)
+        if count == 0:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"Patch failed on approval: old_string not found in real file '{file_path}'. "
+                    f"The real file has changed since the patch was proposed."
+                ),
+            )
+        if count > 1:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"Patch failed on approval: old_string occurs {count} times in real file '{file_path}'. "
+                    f"The real file has changed since the patch was proposed."
+                ),
+            )
+
+        patched = content.replace(old_string, new_string, 1)
+        target_file.write_text(patched, encoding="utf-8")
+        logger.info("Terraform file patched on approval: %s", file_path)
+
+        return ToolResult(
+            success=True,
+            data={
+                "path": file_path,
+                "status": "patched",
+                "size_bytes": len(patched),
+                "message": f"Successfully patched {file_path}",
+            },
+        )
+
+    async def _render_template(self, params: dict, root: Path | None = None) -> ToolResult:
+        import jinja2
+
+        template_name = str(params.get("template_name", "")).strip()
+        variables = params.get("variables") or {}
+        if not isinstance(variables, dict):
+            return ToolResult(success=False, error="Parameter 'variables' must be a JSON object / dict.")
+
+        clean_name = template_name.lstrip("/\\")
+        if clean_name.startswith("templates/"):
+            clean_name = clean_name[len("templates/"):]
+        elif clean_name.startswith("templates\\"):
+            clean_name = clean_name[len("templates\\"):]
+
+        base_templates_root = ((root or self._iac_root) / "templates").resolve()
+        base_templates_root.mkdir(parents=True, exist_ok=True)
+
+        try:
+            target_file = self._resolve_safe_path(clean_name, root=base_templates_root)
+            if not target_file.exists() or not target_file.is_file():
+                if not clean_name.endswith(".tpl"):
+                    target_file = self._resolve_safe_path(clean_name + ".tpl", root=base_templates_root)
+        except PermissionError as pe:
+            return ToolResult(success=False, error=str(pe))
+
+        if not target_file.exists() or not target_file.is_file():
+            # Fallback check against self._iac_root/templates
+            try:
+                real_tpl = (self._iac_root / "templates" / clean_name).resolve()
+                if real_tpl.exists() and real_tpl.is_file():
+                    target_file = real_tpl
+                elif not clean_name.endswith(".tpl") and (self._iac_root / "templates" / (clean_name + ".tpl")).is_file():
+                    target_file = (self._iac_root / "templates" / (clean_name + ".tpl")).resolve()
+                else:
+                    return ToolResult(success=False, error=f"Template '{template_name}' not found under iac/templates/.")
+            except Exception:
+                return ToolResult(success=False, error=f"Template '{template_name}' not found under iac/templates/.")
+
+        try:
+            tpl_text = target_file.read_text(encoding="utf-8")
+            env = jinja2.Environment(undefined=jinja2.Undefined)
+            rendered = env.from_string(tpl_text).render(**variables)
+            return ToolResult(
+                success=True,
+                data={
+                    "template_name": clean_name,
+                    "rendered": rendered,
+                },
+            )
+        except Exception as e:
+            logger.exception("Failed to render template %s", template_name)
+            return ToolResult(success=False, error=f"Template rendering failed: {e}")
+
     async def _run_terraform_cli(self, args: list[str], cwd: Path) -> tuple[int, str, str]:
-        """Execute the real Terraform CLI directly using asyncio subprocess."""
+        """Execute the real Terraform CLI directly using asyncio subprocess with plugin caching."""
         terraform_bin = shutil.which("terraform") or "/usr/local/bin/terraform"
+
+        env = os.environ.copy()
+        plugin_cache = settings.TF_PLUGIN_CACHE_DIR or str(Path.home() / ".terraform.d" / "plugin-cache")
+        try:
+            Path(plugin_cache).mkdir(parents=True, exist_ok=True)
+            env["TF_PLUGIN_CACHE_DIR"] = plugin_cache
+        except Exception as e:
+            logger.warning("Failed to initialize TF_PLUGIN_CACHE_DIR '%s': %s", plugin_cache, e)
 
         proc = await asyncio.create_subprocess_exec(
             terraform_bin,
             *args,
             cwd=str(cwd),
+            env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -400,10 +586,10 @@ class TerraformMCPServer(MCPServerBase):
         stderr = stderr_b.decode("utf-8", errors="replace")
         return proc.returncode or 0, stdout, stderr
 
-    async def _fmt(self, params: dict) -> ToolResult:
+    async def _fmt(self, params: dict, root: Path | None = None) -> ToolResult:
         subpath = params.get("path", "")
         check = bool(params.get("check", False))
-        target_path = self._resolve_safe_path(subpath)
+        target_path = self._resolve_safe_path(subpath, root=root)
 
         if not target_path.exists():
             return ToolResult(success=False, error=f"Path '{subpath}' does not exist in iac workspace")
@@ -448,9 +634,9 @@ class TerraformMCPServer(MCPServerBase):
             },
         )
 
-    async def _init(self, params: dict) -> ToolResult:
+    async def _init(self, params: dict, root: Path | None = None) -> ToolResult:
         directory = params.get("directory", "environments/dev")
-        target_dir = self._resolve_safe_path(directory)
+        target_dir = self._resolve_safe_path(directory, root=root)
 
         if not target_dir.exists() or not target_dir.is_dir():
             return ToolResult(success=False, error=f"Directory '{directory}' does not exist in iac workspace")
@@ -476,9 +662,9 @@ class TerraformMCPServer(MCPServerBase):
             },
         )
 
-    async def _validate(self, params: dict) -> ToolResult:
+    async def _validate(self, params: dict, root: Path | None = None) -> ToolResult:
         directory = params.get("directory", "environments/dev")
-        target_dir = self._resolve_safe_path(directory)
+        target_dir = self._resolve_safe_path(directory, root=root)
 
         if not target_dir.exists() or not target_dir.is_dir():
             return ToolResult(success=False, error=f"Directory '{directory}' does not exist in iac workspace")
@@ -515,10 +701,10 @@ class TerraformMCPServer(MCPServerBase):
                 error=stderr if code != 0 else None,
             )
 
-    async def _plan(self, params: dict) -> ToolResult:
+    async def _plan(self, params: dict, root: Path | None = None) -> ToolResult:
         directory = params.get("directory", "environments/dev")
         var_file = params.get("var_file")
-        target_dir = self._resolve_safe_path(directory)
+        target_dir = self._resolve_safe_path(directory, root=root)
 
         if not target_dir.exists() or not target_dir.is_dir():
             return ToolResult(success=False, error=f"Directory '{directory}' does not exist in iac workspace")
@@ -526,7 +712,7 @@ class TerraformMCPServer(MCPServerBase):
         args = ["plan", "-no-color"]
         if var_file:
             # Validate var_file path stays inside directory or iac root
-            vf_path = self._resolve_safe_path(f"{directory}/{var_file}" if not var_file.startswith("/") else var_file)
+            vf_path = self._resolve_safe_path(f"{directory}/{var_file}" if not var_file.startswith("/") else var_file, root=root)
             if vf_path.exists():
                 args.append(f"-var-file={vf_path.name}")
 

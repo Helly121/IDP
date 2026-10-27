@@ -1,4 +1,4 @@
-﻿"""
+"""
 Policy & Cost MCP Server — RBAC validation, cost estimation, and user role queries.
 
 Interfaces with the existing User, Project, and Deployment database tables
@@ -53,35 +53,28 @@ class PolicyMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="policy_check_quota",
-                description=(
-                    "Validate whether a user is allowed to provision the requested resources. "
-                    "Checks role-based limits on replicas and project counts. "
-                    "Returns allowed=true/false with a reason."
-                ),
+                description="Validate if requested replicas and db_type comply with user quota.",
                 parameters=[
-                    ToolParameter(name="user_id", type="string", description="UUID of the requesting user"),
-                    ToolParameter(name="requested_replicas", type="integer", description="Number of replicas requested"),
-                    ToolParameter(name="db_type", type="string", description="Database type: postgres, mongodb, redis, none", required=False),
+                    ToolParameter(name="requested_replicas", type="integer", description="Requested replica count"),
+                    ToolParameter(name="db_type", type="string", description="postgres, mongodb, redis, or none", required=False),
                 ],
                 is_mutating=False,
                 category=ToolCategory.POLICY,
             ),
             ToolDefinition(
                 name="policy_estimate_cost",
-                description="Estimate the monthly cost (USD) for a given resource configuration.",
+                description="Estimate monthly cost (USD) for replicas and db_type.",
                 parameters=[
-                    ToolParameter(name="replicas", type="integer", description="Number of pod replicas"),
-                    ToolParameter(name="db_type", type="string", description="Database type: postgres, mongodb, redis, none"),
+                    ToolParameter(name="replicas", type="integer", description="Pod replicas"),
+                    ToolParameter(name="db_type", type="string", description="postgres, mongodb, redis, or none"),
                 ],
                 is_mutating=False,
                 category=ToolCategory.POLICY,
             ),
             ToolDefinition(
                 name="policy_get_user_role",
-                description="Get a user's role, current project count, and total resource usage across all projects.",
-                parameters=[
-                    ToolParameter(name="user_id", type="string", description="UUID of the user"),
-                ],
+                description="Get user role, project count, and resource usage.",
+                parameters=[],
                 is_mutating=False,
                 category=ToolCategory.POLICY,
             ),
@@ -99,21 +92,25 @@ class PolicyMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="policy_approve_escalation",
-                description=(
-                    "Record that a guide or admin has approved an over-quota resource request. "
-                    "This allows the student's request to proceed."
-                ),
+                description="Approve over-quota request for student. Guide/admin only.",
                 parameters=[
-                    ToolParameter(name="user_id", type="string", description="UUID of the student whose request is being approved"),
-                    ToolParameter(name="approver_id", type="string", description="UUID of the guide/admin approving"),
-                    ToolParameter(name="requested_replicas", type="integer", description="Number of replicas being approved"),
+                    ToolParameter(name="requested_replicas", type="integer", description="Approved replica count"),
                 ],
                 is_mutating=True,
                 category=ToolCategory.POLICY,
             ),
         ]
 
-    async def execute_tool(self, tool_name: str, params: dict) -> ToolResult:
+    async def execute_tool(
+        self,
+        tool_name: str,
+        params: dict,
+        ctx: dict | None = None,
+    ) -> ToolResult:
+        # Identity injection: override model-supplied user_id with server-side ctx user_id
+        if ctx and ctx.get("user_id"):
+            params["user_id"] = str(ctx["user_id"])
+
         dispatch = {
             "policy_check_quota": self._check_quota,
             "policy_estimate_cost": self._estimate_cost,
@@ -161,7 +158,10 @@ class PolicyMCPServer(MCPServerBase):
             return ToolResult(success=True, data={"services": services})
 
     async def _check_quota(self, params: dict) -> ToolResult:
-        user_id = uuid.UUID(params["user_id"])
+        uid_raw = params.get("user_id")
+        if not uid_raw:
+            return ToolResult(success=False, error="user_id is required in execution context")
+        user_id = uuid.UUID(str(uid_raw))
         requested_replicas = params["requested_replicas"]
 
         async with async_session_factory() as db:
@@ -217,7 +217,10 @@ class PolicyMCPServer(MCPServerBase):
         })
 
     async def _get_user_role(self, params: dict) -> ToolResult:
-        user_id = uuid.UUID(params["user_id"])
+        uid_raw = params.get("user_id")
+        if not uid_raw:
+            return ToolResult(success=False, error="user_id is required in execution context")
+        user_id = uuid.UUID(str(uid_raw))
 
         async with async_session_factory() as db:
             user = await db.get(User, user_id)
@@ -243,7 +246,10 @@ class PolicyMCPServer(MCPServerBase):
             })
 
     async def _approve_escalation(self, params: dict) -> ToolResult:
-        approver_id = uuid.UUID(params["approver_id"])
+        approver_raw = params.get("approver_id")
+        if not approver_raw:
+            return ToolResult(success=False, error="approver_id must be provided by reviewer approval")
+        approver_id = uuid.UUID(str(approver_raw))
 
         async with async_session_factory() as db:
             approver = await db.get(User, approver_id)
@@ -254,8 +260,9 @@ class PolicyMCPServer(MCPServerBase):
 
             return ToolResult(success=True, data={
                 "approved": True,
-                "user_id": params["user_id"],
+                "user_id": params.get("user_id"),
                 "approved_by": str(approver_id),
-                "approved_replicas": params["requested_replicas"],
+                "approved_replicas": params.get("requested_replicas"),
                 "message": f"Escalation approved by {approver.full_name or approver.email}",
             })
+

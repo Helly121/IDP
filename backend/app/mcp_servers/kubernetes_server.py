@@ -1,4 +1,4 @@
-﻿"""
+"""
 Kubernetes MCP Server — Tools for querying and managing Kubernetes clusters.
 
 Supports kubeconfig-file mode (local dev with Docker Desktop) and
@@ -71,31 +71,28 @@ class KubernetesMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="k8s_list_pods",
-                description="List all pods in a Kubernetes namespace with their status, restarts, and age.",
+                description="List pods in namespace with status, restarts, and age.",
                 parameters=[
-                    ToolParameter(name="namespace", type="string", description="Kubernetes namespace (e.g. default, idp-my-service)"),
+                    ToolParameter(name="namespace", type="string", description="Kubernetes namespace (e.g. default)"),
                 ],
                 is_mutating=False,
                 category=ToolCategory.KUBERNETES,
             ),
             ToolDefinition(
                 name="k8s_get_pod_logs",
-                description=(
-                    "Fetch the most recent logs from a specific pod. "
-                    "Use this to diagnose CrashLoopBackOff, OOMKilled, or application errors."
-                ),
+                description="Fetch recent logs for pod to diagnose failures.",
                 parameters=[
                     ToolParameter(name="namespace", type="string", description="Kubernetes namespace"),
                     ToolParameter(name="pod_name", type="string", description="Exact pod name"),
-                    ToolParameter(name="tail_lines", type="integer", description="Number of recent lines to return", required=False),
-                    ToolParameter(name="previous", type="boolean", description="If true, return logs from the previous terminated container", required=False),
+                    ToolParameter(name="tail_lines", type="integer", description="Recent lines to return (default 50)", required=False, default=50),
+                    ToolParameter(name="previous", type="boolean", description="If true, return logs from previous terminated container", required=False),
                 ],
                 is_mutating=False,
                 category=ToolCategory.KUBERNETES,
             ),
             ToolDefinition(
                 name="k8s_get_namespace_resources",
-                description="Check resource quotas, limit ranges, and current usage for a namespace.",
+                description="Check resource quotas and usage for a namespace.",
                 parameters=[
                     ToolParameter(name="namespace", type="string", description="Kubernetes namespace"),
                 ],
@@ -104,20 +101,20 @@ class KubernetesMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="k8s_get_events",
-                description="Get recent Kubernetes events for a namespace. Useful for diagnosing scheduling, pulling, or mounting failures.",
+                description="Get recent Kubernetes events for a namespace.",
                 parameters=[
                     ToolParameter(name="namespace", type="string", description="Kubernetes namespace"),
-                    ToolParameter(name="limit", type="integer", description="Max number of events to return", required=False),
+                    ToolParameter(name="limit", type="integer", description="Max events to return", required=False),
                 ],
                 is_mutating=False,
                 category=ToolCategory.KUBERNETES,
             ),
             ToolDefinition(
                 name="k8s_apply_manifest",
-                description="Apply a Kubernetes YAML manifest to the cluster. This creates or updates the resource.",
+                description="Apply a Kubernetes YAML manifest to the cluster.",
                 parameters=[
                     ToolParameter(name="namespace", type="string", description="Target namespace"),
-                    ToolParameter(name="manifest_yaml", type="string", description="The full YAML manifest to apply"),
+                    ToolParameter(name="manifest_yaml", type="string", description="YAML manifest to apply"),
                 ],
                 is_mutating=True,
                 category=ToolCategory.KUBERNETES,
@@ -170,7 +167,7 @@ class KubernetesMCPServer(MCPServerBase):
     def _get_pod_logs(self, params: dict) -> ToolResult:
         ns = params["namespace"]
         pod = params["pod_name"]
-        tail = params.get("tail_lines", 100)
+        tail = params.get("tail_lines", 50)
         previous = params.get("previous", False)
 
         logs = self._v1.read_namespaced_pod_log(
@@ -179,7 +176,10 @@ class KubernetesMCPServer(MCPServerBase):
             tail_lines=tail,
             previous=previous,
         )
-        return ToolResult(success=True, data={"pod": pod, "logs": logs})
+        # Collapse consecutive identical lines to reduce log volume
+        from app.services.context_budget import collapse_identical_lines
+        collapsed_logs = collapse_identical_lines(logs)
+        return ToolResult(success=True, data={"pod": pod, "logs": collapsed_logs})
 
     def _get_namespace_resources(self, params: dict) -> ToolResult:
         ns = params["namespace"]

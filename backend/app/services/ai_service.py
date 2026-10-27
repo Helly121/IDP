@@ -1,4 +1,4 @@
-﻿"""
+"""
 AI Agent Orchestrator â€” Gemini-powered agentic loop with MCP tool calling.
 
 Replaces the previous static prompt-wrapper with an autonomous agent that:
@@ -26,65 +26,169 @@ from app.models.project import Project
 from app.mcp_servers.registry import registry
 from app.schemas.agent import AgentEvent, AgentEventType
 from app.services import approval_service
+from app.services.context_budget import (
+    compact_for_model,
+    compact_for_ui,
+    compact_chat_history,
+)
+
+from app.mcp_servers.base import ToolCategory
+from app.services.tool_router import select_tool_categories
 from app.services import project_service
 
 logger = logging.getLogger(__name__)
 
-# Gemini model and function-calling setup
-_gemini_model = None
+# Cache one GenerativeModel per frozenset of ToolCategory
+_model_cache: dict[frozenset[ToolCategory], Any] = {}
 
-def _get_gemini_model():
-    """Lazily initialise the Gemini model with MCP tool declarations."""
-    global _gemini_model
-    if _gemini_model is None and settings.GEMINI_API_KEY:
+
+def _get_gemini_model(categories: frozenset[ToolCategory] | None = None) -> Any:
+    """
+    Build and cache a Gemini GenerativeModel configured specifically
+    with the tool declarations for the given categories.
+    """
+    global _model_cache
+    if not settings.GEMINI_API_KEY:
+        return None
+
+    cat_key = categories if categories is not None else frozenset(ToolCategory)
+
+    if cat_key not in _model_cache:
         try:
             import google.generativeai as genai
 
             genai.configure(api_key=settings.GEMINI_API_KEY)
 
-            # Build tool declarations from the MCP registry
-            tool_declarations = registry.get_gemini_declarations()
-            logger.info("Registering %d tools with Gemini", len(tool_declarations))
+            # Build tool declarations filtered by selected categories
+            tool_declarations = registry.get_gemini_declarations(set(cat_key))
+            logger.info(
+                "Initializing Gemini model for categories %s with %d tools (model: %s)",
+                [c.value for c in cat_key],
+                len(tool_declarations),
+                settings.GEMINI_MODEL,
+            )
 
-            _gemini_model = genai.GenerativeModel(
-                "gemini-flash-latest",
+            _model_cache[cat_key] = genai.GenerativeModel(
+                settings.GEMINI_MODEL,
                 tools=[{"function_declarations": tool_declarations}] if tool_declarations else None,
                 system_instruction=_build_system_prompt(),
             )
-            logger.info("Gemini agent model initialized with function calling")
         except Exception as e:
-            logger.warning("Failed to initialize Gemini agent: %s", e)
-    return _gemini_model
+            logger.warning("Failed to initialize Gemini agent model: %s", e)
+            return None
+
+    return _model_cache[cat_key]
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """Check if exception represents an HTTP 429 or quota limit exhaustion."""
+    try:
+        from google.api_core import exceptions
+        if isinstance(exc, exceptions.ResourceExhausted):
+            return True
+    except ImportError:
+        pass
+    if getattr(exc, "status_code", None) == 429 or getattr(exc, "code", None) == 429:
+        return True
+    exc_str = str(exc).lower()
+    return "429" in exc_str or "resourceexhausted" in exc_str or "quota" in exc_str or "rate limit" in exc_str
+
+
+def _extract_retry_delay(exc: Exception, default_delay: float) -> float:
+    """Extract retry delay seconds from exception message or metadata if present."""
+    import re
+    msg = str(exc)
+    match = re.search(r"retry[-_\s]?(?:in|after)?[:\s]+([0-9.]+)\s*s?", msg, re.IGNORECASE)
+    if match:
+        try:
+            return float(match.group(1))
+        except (ValueError, TypeError):
+            pass
+    metadata = getattr(exc, "metadata", None)
+    if metadata:
+        for k, v in metadata:
+            if "retry" in str(k).lower():
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    pass
+    return default_delay
+
+
+async def _send_chat_message_with_retry(
+    chat: Any,
+    content: Any,
+    max_retries: int = 2,
+) -> AsyncGenerator[tuple[str | None, Any | None], None]:
+    """
+    Send message asynchronously using SDK async method (chat.send_message_async),
+    with thread pool fallback for synchronous chats.
+
+    Handles quota errors (HTTP 429 / ResourceExhausted) by retrying at most 2 times
+    with exponential backoff plus jitter, honoring any specified retry delay.
+    Yields (sse_event_string, None) during retry waits so callers can stream THINKING events live.
+    Yields (None, response) when successful.
+    """
+    import asyncio
+    import inspect
+    import random
+
+    retries = 0
+    while True:
+        try:
+            if hasattr(chat, "send_message_async"):
+                resp = await chat.send_message_async(content)
+            elif hasattr(chat, "send_message"):
+                if inspect.iscoroutinefunction(chat.send_message):
+                    resp = await chat.send_message(content)
+                else:
+                    resp = await asyncio.to_thread(chat.send_message, content)
+            else:
+                raise AttributeError("Chat session has no send_message or send_message_async method")
+            yield (None, resp)
+            return
+        except Exception as e:
+            if _is_rate_limit_error(e) and retries < max_retries:
+                retries += 1
+                base_delay = 2.0 ** retries
+                jitter = random.uniform(0.1, 1.0)
+                delay = _extract_retry_delay(e, base_delay + jitter)
+                logger.warning(
+                    "LLM rate limited (retry %d/%d). Retrying in %.1f s: %s",
+                    retries,
+                    max_retries,
+                    delay,
+                    e,
+                )
+                yield (
+                    AgentEvent(
+                        type=AgentEventType.THINKING,
+                        data={"message": f"Rate limited, retrying in {delay:.1f} s"},
+                        timestamp=datetime.now(timezone.utc),
+                    ).to_sse(),
+                    None,
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
 
 def _build_system_prompt() -> str:
-    """Build the system prompt for the DevOps AI agent."""
-    return """You are an expert DevOps AI agent embedded in an Academic Internal Developer Platform (IDP).
-Your role is to help students, guides, and admins with:
-- Provisioning and managing Terraform Infrastructure-as-Code (IaC) under iac/
-- Generating and managing GitHub Actions CI/CD pipelines under .github/workflows/
-- Generating Dockerfiles, Kubernetes manifests, and managing cluster resources
-- Diagnosing deployment failures (CrashLoopBackOff, ImagePullBackOff, OOMKilled)
-- Managing GitHub repositories and ArgoCD GitOps synchronisation
-- Enforcing institutional RBAC policies (student quotas vs faculty approvals)
+    """Concise system prompt for the Academic IDP DevOps agent."""
+    return """You are the DevOps AI agent for the Academic Internal Developer Platform (IDP).
+Assist users with Terraform (under iac/), GitHub Actions (under .github/workflows/), Kubernetes/ArgoCD deployments, diagnostics, and RBAC/cost policies.
 
-You have access to MCP tools for:
-- Terraform: inspect files, create/update configurations, format (terraform_fmt), initialize (terraform_init), validate (terraform_validate), and generate safe speculative plans (terraform_plan)
-- CI/CD Workflows: list, inspect, create/update (workflow_write), and validate (workflow_validate) GitHub Actions workflows
-- GitHub: create repositories, list repositories, push and read files
-- Kubernetes & ArgoCD: inspect and manage cluster workloads and GitOps sync
-- Policy Engine: evaluate RBAC rules and calculate cost estimations
-
-Important Operational & Security Rules:
-1. Mutating actions (such as terraform_write_file, workflow_write, github_push_file, github_create_repo) automatically trigger Human-in-the-Loop (HITL) approval gates. Inform the user that the action is queued for review.
-2. Terraform apply is NOT an MCP capability. Infrastructure deployments are executed exclusively through protected GitHub Actions workflows after code is committed and approved.
-3. Keep all Terraform operations strictly scoped to iac/ and workflow operations strictly scoped to .github/workflows/.
-4. Always explain your plan, execute appropriate validation/formatting/planning tools, and be concise, helpful, and security-conscious. Never expose secrets or credentials."""
+Key Rules:
+1. Mutating tools trigger HITL approval. Inform the user when actions are queued.
+2. Terraform apply is NOT an MCP capability; deployments occur via approved CI/CD.
+3. Keep Terraform scoped to iac/ and workflows to .github/workflows/.
+4. Be concise, validate configurations, and never expose secrets or credentials."""
 
 async def run_agent_stream(
     message: str,
     user_id: str,
     project_id: str | None = None,
     session_id: str | None = None,
+    model: Any = None,
 ) -> AsyncGenerator[str, None]:
     """
     Main entry point: run the agentic loop and yield SSE events.
@@ -102,6 +206,12 @@ async def run_agent_stream(
         timestamp=now(),
     ).to_sse()
 
+    # Route minimal tool categories based on message intent
+    selected_categories = select_tool_categories(message, target_project=project_id)
+    cat_key = frozenset(selected_categories)
+
+    if model is None:
+        model = _get_gemini_model(cat_key)
     try:
         uid = uuid.UUID(user_id)
         target_project_id = uuid.UUID(project_id) if project_id else None
@@ -185,14 +295,61 @@ async def run_agent_stream(
     try:
         # Start a chat session for multi-turn tool calling
         chat = model.start_chat(history=[])
-        response = chat.send_message("\n".join(context_parts))
+        response = None
+        async for sse_event, resp in _send_chat_message_with_retry(chat, "\n".join(context_parts)):
+            if sse_event:
+                yield sse_event
+            if resp is not None:
+                response = resp
+
+        if response is None:
+            yield AgentEvent(
+                type=AgentEventType.ERROR,
+                data={"message": "No response received from AI model"},
+                timestamp=now(),
+            ).to_sse()
+            return
 
         # Agentic loop: keep processing until we get a text response
-        max_iterations = 10
+        max_iterations = settings.AGENT_MAX_ITERATIONS
         iteration = 0
+        seen_tool_calls: set[str] = set()
+
+        # Token usage tracking
+        total_prompt_tokens = 0
+        total_candidates_tokens = 0
+        total_model_tokens = 0
+        call_count = 0
+        call_usages: list[dict[str, Any]] = []
 
         while iteration < max_iterations:
             iteration += 1
+
+            # Extract usage metadata from response
+            usage_meta = getattr(response, "usage_metadata", None)
+            prompt_tokens = getattr(usage_meta, "prompt_token_count", 0) if usage_meta else 0
+            candidates_tokens = getattr(usage_meta, "candidates_token_count", 0) if usage_meta else 0
+            total_tokens = getattr(usage_meta, "total_token_count", prompt_tokens + candidates_tokens) if usage_meta else (prompt_tokens + candidates_tokens)
+
+            call_count += 1
+            total_prompt_tokens += prompt_tokens
+            total_candidates_tokens += candidates_tokens
+            total_model_tokens += total_tokens
+            call_usages.append({
+                "call_index": call_count,
+                "iteration": iteration,
+                "prompt_tokens": prompt_tokens,
+                "candidates_tokens": candidates_tokens,
+                "total_tokens": total_tokens,
+            })
+
+            logger.info(
+                "Agent iteration %d token usage: prompt=%d, candidates=%d, total=%d",
+                iteration,
+                prompt_tokens,
+                candidates_tokens,
+                total_tokens,
+            )
 
             # Check if the response contains function calls
             candidate = response.candidates[0] if response.candidates else None
@@ -215,7 +372,17 @@ async def run_agent_stream(
                 final_text = "\n".join(text_parts) if text_parts else "I've completed the analysis."
                 yield AgentEvent(
                     type=AgentEventType.FINAL_RESPONSE,
-                    data={"message": final_text},
+                    data={
+                        "message": final_text,
+                        "usage": {
+                            "prompt_tokens": total_prompt_tokens,
+                            "candidates_tokens": total_candidates_tokens,
+                            "total_tokens": total_model_tokens,
+                            "api_calls": call_count,
+                            "iterations": iteration,
+                            "calls": call_usages,
+                        },
+                    },
                     timestamp=now(),
                 ).to_sse()
                 return
@@ -241,8 +408,85 @@ async def run_agent_stream(
                     timestamp=now(),
                 ).to_sse()
 
+                # Duplicate-call guard: check canonical JSON args
+                canonical_args = json.dumps(tool_params, sort_keys=True, separators=(",", ":"))
+                call_signature = f"{tool_name}:{canonical_args}"
+
+                if call_signature in seen_tool_calls:
+                    logger.info("Duplicate tool call suppressed: %s", call_signature)
+                    dup_message = "already retrieved above"
+                    yield AgentEvent(
+                        type=AgentEventType.TOOL_RESULT,
+                        data={
+                            "tool_name": tool_name,
+                            "success": True,
+                            "result": {"message": dup_message},
+                        },
+                        timestamp=now(),
+                    ).to_sse()
+
+                    function_responses.append(
+                        protos.Part(
+                            function_response=protos.FunctionResponse(
+                                name=tool_name,
+                                response={"result": dup_message},
+                            )
+                        )
+                    )
+                    continue
+
+                seen_tool_calls.add(call_signature)
+
                 # Check if this is a mutating tool
                 if registry.is_mutating(tool_name):
+                    # For patch tools, apply patch to staged copy at proposal time.
+                    # Fail immediately if old_string is not found exactly once.
+                    stage_error = None
+                    try:
+                        from app.services import staging_service
+                        if tool_name == "terraform_patch_file":
+                            from app.mcp_servers.terraform_server import _get_iac_root
+                            staging_service.stage_terraform_patch(
+                                session_id=sid,
+                                file_path=tool_params.get("file_path", ""),
+                                old_string=tool_params.get("old_string", ""),
+                                new_string=tool_params.get("new_string", ""),
+                                real_iac_root=_get_iac_root(),
+                            )
+                        elif tool_name == "workflow_patch":
+                            from app.mcp_servers.workflow_server import _get_workflows_root
+                            staging_service.stage_workflow_patch(
+                                session_id=sid,
+                                workflow_name=tool_params.get("file_path") or tool_params.get("workflow_name", ""),
+                                old_string=tool_params.get("old_string", ""),
+                                new_string=tool_params.get("new_string", ""),
+                                real_workflows_root=_get_workflows_root(),
+                            )
+                    except Exception as pe:
+                        stage_error = str(pe)
+                        logger.warning("Patch proposal failed at staging for %s: %s", tool_name, pe)
+
+                    if stage_error:
+                        yield AgentEvent(
+                            type=AgentEventType.TOOL_RESULT,
+                            data={
+                                "tool_name": tool_name,
+                                "success": False,
+                                "error": stage_error,
+                            },
+                            timestamp=now(),
+                        ).to_sse()
+
+                        function_responses.append(
+                            protos.Part(
+                                function_response=protos.FunctionResponse(
+                                    name=tool_name,
+                                    response={"error": stage_error},
+                                )
+                            )
+                        )
+                        continue
+
                     # Create a pending action and yield approval_required
                     async with async_session_factory() as db:
                         action = await approval_service.create_pending_action(
@@ -268,6 +512,28 @@ async def run_agent_stream(
                             timestamp=now(),
                         ).to_sse()
 
+                    # Stage proposed content into per-session staging tree for full write tools
+                    try:
+                        from app.services import staging_service
+                        if tool_name == "terraform_write_file":
+                            from app.mcp_servers.terraform_server import _get_iac_root
+                            staging_service.stage_terraform_file(
+                                session_id=sid,
+                                file_path=tool_params.get("file_path", ""),
+                                content=tool_params.get("content", ""),
+                                real_iac_root=_get_iac_root(),
+                            )
+                        elif tool_name == "workflow_write":
+                            from app.mcp_servers.workflow_server import _get_workflows_root
+                            staging_service.stage_workflow_file(
+                                session_id=sid,
+                                workflow_name=tool_params.get("workflow_name", ""),
+                                content=tool_params.get("content", ""),
+                                real_workflows_root=_get_workflows_root(),
+                            )
+                    except Exception as se:
+                        logger.warning("Failed to stage %s for session %s: %s", tool_name, sid, se)
+
                     # Feed back a "pending" result to Gemini so it can continue reasoning
                     function_responses.append(
                         protos.Part(
@@ -284,6 +550,16 @@ async def run_agent_stream(
                         )
                     )
                 else:
+                    # Read-only tool: execute immediately with session and user context
+                    ctx = {
+                        "user_id": str(uid) if uid else (str(user_id) if user_id else None),
+                        "session_id": str(sid),
+                    }
+                    result = await registry.dispatch(tool_name, tool_params, ctx=ctx)
+                    raw_result = result.to_dict()
+
+                    # Yield: tool_result event using UI limit (UI_RESULT_MAX_CHARS)
+                    ui_result = compact_for_ui(tool_name, raw_result)
                     # Read-only tool: execute immediately
                     if tool_name == "catalog_list_projects":
                         tool_params["user_id"] = str(uid)
@@ -295,31 +571,71 @@ async def run_agent_stream(
                         data={
                             "tool_name": tool_name,
                             "success": result.success,
-                            "result": result.to_dict(),
+                            "result": ui_result,
                         },
                         timestamp=now(),
                     ).to_sse()
 
+                    # Feed compacted result to model using model limit (TOOL_RESULT_MAX_CHARS)
+                    model_result = compact_for_model(tool_name, raw_result)
                     function_responses.append(
                         protos.Part(
                             function_response=protos.FunctionResponse(
                                 name=tool_name,
-                                response={"result": result.to_dict()},
+                                response={"result": model_result},
                             )
                         )
                     )
 
-            # Send all function responses back to Gemini for the next iteration
-            response = chat.send_message(function_responses)
+            # History control: compact older function_response turns in chat.history to one-line stubs.
+            # Latest iteration's function_responses stay full.
+            # Model-role parts (thought signatures, tool calls) are NEVER touched.
+            if hasattr(chat, "history") and isinstance(chat.history, list):
+                compact_chat_history(chat.history)
+
+            # Send all function responses back to Gemini asynchronously for the next iteration
+            response = None
+            async for sse_event, resp in _send_chat_message_with_retry(chat, function_responses):
+                if sse_event:
+                    yield sse_event
+                if resp is not None:
+                    response = resp
+
+            if response is None:
+                yield AgentEvent(
+                    type=AgentEventType.ERROR,
+                    data={"message": "No response received from AI model"},
+                    timestamp=now(),
+                ).to_sse()
+                return
 
         # If we hit max iterations, yield a warning
         yield AgentEvent(
             type=AgentEventType.FINAL_RESPONSE,
-            data={"message": "I've reached the maximum number of reasoning steps. Here's what I've found so far."},
+            data={
+                "message": "I've reached the maximum number of reasoning steps. Here's what I've found so far.",
+                "usage": {
+                    "prompt_tokens": total_prompt_tokens,
+                    "candidates_tokens": total_candidates_tokens,
+                    "total_tokens": total_model_tokens,
+                    "api_calls": call_count,
+                    "iterations": iteration,
+                    "calls": call_usages,
+                },
+            },
             timestamp=now(),
         ).to_sse()
 
     except Exception as e:
+        if _is_rate_limit_error(e):
+            logger.error("AI quota exhausted: %s", e)
+            yield AgentEvent(
+                type=AgentEventType.ERROR,
+                data={"message": "AI quota was reached. Please wait a moment or try again later."},
+                timestamp=now(),
+            ).to_sse()
+            return
+
         logger.exception("Agent loop error")
         yield AgentEvent(
             type=AgentEventType.ERROR,

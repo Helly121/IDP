@@ -60,6 +60,8 @@ desktop.ini
 *.sqlite
 *.sqlite3
 idp_dev.db
+staging/
+backend/staging/
 
 # Coverage
 htmlcov/

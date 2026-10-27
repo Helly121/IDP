@@ -56,11 +56,12 @@ class WorkflowMCPServer(MCPServerBase):
     # Security / Sandboxing
     # ------------------------------------------------------------------
 
-    def _resolve_safe_path(self, workflow_name: str) -> Path:
+    def _resolve_safe_path(self, workflow_name: str, root: Path | None = None) -> Path:
         """
-        Safely resolve a workflow file path inside the allowed workflows root.
+        Safely resolve a workflow file path inside the allowed workflows root (or staging root).
         Rejects path traversal, slashes, or escaping files.
         """
+        base_root = (root or self._workflows_root).resolve()
         clean_name = workflow_name.strip().lstrip("/\\")
 
         # Filename cannot contain directory traversal components
@@ -72,16 +73,27 @@ class WorkflowMCPServer(MCPServerBase):
         if not (clean_name.endswith(".yml") or clean_name.endswith(".yaml")):
             clean_name += ".yml"
 
-        target = (self._workflows_root / clean_name).resolve()
+        target = (base_root / clean_name).resolve()
 
         try:
-            target.relative_to(self._workflows_root)
+            target.relative_to(base_root)
         except ValueError:
             raise PermissionError(
-                f"Access denied: Path '{workflow_name}' escapes workflows workspace '{self._workflows_root}'"
+                f"Access denied: Path '{workflow_name}' escapes workflows workspace '{base_root}'"
             )
 
         return target
+
+    def _get_active_root(self, ctx: dict | None = None) -> Path:
+        """Return the session staging workflows root if staged files exist, else the base workflows root."""
+        if ctx and ctx.get("session_id"):
+            from app.services.staging_service import has_staged_workflows, get_staged_workflows_root
+            sid = ctx["session_id"]
+            if has_staged_workflows(sid):
+                staged = get_staged_workflows_root(sid)
+                if staged:
+                    return staged
+        return self._workflows_root
 
     # ------------------------------------------------------------------
     # MCPServerBase interface
@@ -94,19 +106,19 @@ class WorkflowMCPServer(MCPServerBase):
         return [
             ToolDefinition(
                 name="workflow_list",
-                description="List all GitHub Actions workflow files under .github/workflows/.",
+                description="List workflow files under .github/workflows/.",
                 parameters=[],
                 is_mutating=False,
                 category=ToolCategory.CICD,
             ),
             ToolDefinition(
                 name="workflow_get",
-                description="Read the contents of a GitHub Actions workflow YAML file.",
+                description="Read a GitHub Actions workflow YAML file.",
                 parameters=[
                     ToolParameter(
                         name="workflow_name",
                         type="string",
-                        description="Workflow file name (e.g. 'ci-cd.yml' or 'terraform.yml')",
+                        description="Workflow file name (e.g. 'ci-cd.yml')",
                         required=True,
                     ),
                 ],
@@ -115,11 +127,7 @@ class WorkflowMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="workflow_write",
-                description=(
-                    "Create or update a GitHub Actions workflow file under .github/workflows/. "
-                    "Validates YAML syntax before saving. "
-                    "This is a MUTATING action and requires Human-in-the-Loop (HITL) approval before execution."
-                ),
+                description="Create or update workflow file under .github/workflows/. Validates YAML.",
                 parameters=[
                     ToolParameter(
                         name="workflow_name",
@@ -130,7 +138,7 @@ class WorkflowMCPServer(MCPServerBase):
                     ToolParameter(
                         name="content",
                         type="string",
-                        description="Complete YAML content of the GitHub Actions workflow",
+                        description="Complete YAML content",
                         required=True,
                     ),
                 ],
@@ -139,10 +147,7 @@ class WorkflowMCPServer(MCPServerBase):
             ),
             ToolDefinition(
                 name="workflow_validate",
-                description=(
-                    "Validate the YAML syntax and required GitHub Actions structure "
-                    "(e.g. name, on, jobs) for a workflow definition."
-                ),
+                description="Validate YAML syntax and structure for a workflow.",
                 parameters=[
                     ToolParameter(
                         name="content",
@@ -154,14 +159,47 @@ class WorkflowMCPServer(MCPServerBase):
                 is_mutating=False,
                 category=ToolCategory.CICD,
             ),
+            ToolDefinition(
+                name="workflow_patch",
+                description="Patch workflow file under .github/workflows/ by replacing old_string with new_string. Fails if old_string is not found exactly once.",
+                parameters=[
+                    ToolParameter(
+                        name="file_path",
+                        type="string",
+                        description="Workflow file name (e.g. 'ci.yml')",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="old_string",
+                        type="string",
+                        description="Exact string to replace (must appear exactly once)",
+                        required=True,
+                    ),
+                    ToolParameter(
+                        name="new_string",
+                        type="string",
+                        description="Replacement string",
+                        required=True,
+                    ),
+                ],
+                is_mutating=True,
+                category=ToolCategory.CICD,
+            ),
         ]
 
-    async def execute_tool(self, tool_name: str, params: dict) -> ToolResult:
+    async def execute_tool(
+        self,
+        tool_name: str,
+        params: dict,
+        ctx: dict | None = None,
+    ) -> ToolResult:
+        effective_root = self._get_active_root(ctx)
         dispatch = {
-            "workflow_list": self._list_workflows,
-            "workflow_get": self._get_workflow,
+            "workflow_list": lambda p: self._list_workflows(p, root=effective_root),
+            "workflow_get": lambda p: self._get_workflow(p, root=effective_root),
             "workflow_write": self._write_workflow,
-            "workflow_validate": self._validate_workflow,
+            "workflow_patch": self._patch_workflow,
+            "workflow_validate": lambda p: self._validate_workflow(p, root=effective_root),
         }
         handler = dispatch.get(tool_name)
         if handler is None:
@@ -179,15 +217,16 @@ class WorkflowMCPServer(MCPServerBase):
     # Tool Implementations
     # ------------------------------------------------------------------
 
-    async def _list_workflows(self, params: dict) -> ToolResult:
-        if not self._workflows_root.exists() or not self._workflows_root.is_dir():
+    async def _list_workflows(self, params: dict, root: Path | None = None) -> ToolResult:
+        target_root = (root or self._workflows_root).resolve()
+        if not target_root.exists() or not target_root.is_dir():
             return ToolResult(
                 success=True,
                 data={"workflows": [], "count": 0, "message": "Workflows directory does not exist yet"},
             )
 
         workflows = []
-        for file in self._workflows_root.iterdir():
+        for file in target_root.iterdir():
             if file.is_file() and (file.name.endswith(".yml") or file.name.endswith(".yaml")):
                 workflow_info: dict[str, Any] = {
                     "file_name": file.name,
@@ -209,9 +248,9 @@ class WorkflowMCPServer(MCPServerBase):
             data={"count": len(workflows), "workflows": workflows},
         )
 
-    async def _get_workflow(self, params: dict) -> ToolResult:
+    async def _get_workflow(self, params: dict, root: Path | None = None) -> ToolResult:
         workflow_name = params["workflow_name"]
-        target_file = self._resolve_safe_path(workflow_name)
+        target_file = self._resolve_safe_path(workflow_name, root=root)
 
         if not target_file.exists() or not target_file.is_file():
             return ToolResult(success=False, error=f"Workflow file '{workflow_name}' does not exist")
@@ -241,8 +280,8 @@ class WorkflowMCPServer(MCPServerBase):
         except yaml.YAMLError as ye:
             return ToolResult(success=False, error=f"Invalid YAML syntax: {ye}")
 
-        # 2. Resolve safe path and write
-        target_file = self._resolve_safe_path(workflow_name)
+        # 2. Resolve safe path in real root and write
+        target_file = self._resolve_safe_path(workflow_name, root=self._workflows_root)
         target_file.parent.mkdir(parents=True, exist_ok=True)
 
         target_file.write_text(content, encoding="utf-8")
@@ -257,8 +296,75 @@ class WorkflowMCPServer(MCPServerBase):
             },
         )
 
-    async def _validate_workflow(self, params: dict) -> ToolResult:
-        content = params["content"]
+    async def _patch_workflow(self, params: dict) -> ToolResult:
+        workflow_name = params.get("file_path") or params.get("workflow_name", "")
+        if not workflow_name:
+            return ToolResult(success=False, error="Parameter 'file_path' is required.")
+
+        old_string = params.get("old_string", "")
+        new_string = params.get("new_string", "")
+
+        target_file = self._resolve_safe_path(workflow_name, root=self._workflows_root)
+        if not target_file.exists() or not target_file.is_file():
+            return ToolResult(
+                success=False,
+                error=f"Patch failed on approval: real workflow '{workflow_name}' not found.",
+            )
+
+        content = target_file.read_text(encoding="utf-8")
+        count = content.count(old_string)
+        if count == 0:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"Patch failed on approval: old_string not found in real workflow '{workflow_name}'. "
+                    f"The real file has changed since the patch was proposed."
+                ),
+            )
+        if count > 1:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"Patch failed on approval: old_string occurs {count} times in real workflow '{workflow_name}'. "
+                    f"The real file has changed since the patch was proposed."
+                ),
+            )
+
+        patched = content.replace(old_string, new_string, 1)
+
+        try:
+            yaml.safe_load(patched)
+        except yaml.YAMLError as ye:
+            return ToolResult(success=False, error=f"YAML syntax error after patch: {ye}")
+
+        target_file.write_text(patched, encoding="utf-8")
+        logger.info("Workflow patched on approval: %s", target_file.name)
+
+        return ToolResult(
+            success=True,
+            data={
+                "workflow_name": target_file.name,
+                "status": "patched",
+                "size_bytes": len(patched),
+                "message": f"Successfully patched workflow {target_file.name}",
+            },
+        )
+
+    async def _validate_workflow(self, params: dict, root: Path | None = None) -> ToolResult:
+        content = params.get("content")
+        workflow_name = params.get("workflow_name")
+
+        # If content is not directly supplied, load from staging/real file
+        if not content and workflow_name:
+            target_file = self._resolve_safe_path(workflow_name, root=root)
+            if target_file.exists() and target_file.is_file():
+                content = target_file.read_text(encoding="utf-8")
+
+        if not content:
+            return ToolResult(
+                success=False,
+                error="Parameter 'content' or valid 'workflow_name' is required for validation",
+            )
 
         try:
             parsed = yaml.safe_load(content)
